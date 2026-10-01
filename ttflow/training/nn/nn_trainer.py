@@ -22,7 +22,7 @@ from loguru import logger
 from sklearn.model_selection import train_test_split
 
 from ttflow.training.nn.nn_models import VelocityFieldRegressionNet
-from ttflow.training.nn.nn_trainer_utils import NeuralNetworkTrainer
+from ttflow.training.nn.nn_trainer_utils import NeuralNetworkTrainingUtils
 from ttflow.utils import check_system_memory_and_swap, get_inmemory_size_mb
 
 # Constants
@@ -64,7 +64,12 @@ def parse_args():
         help="Show what would happen without making changes",
     )
     parser.add_argument("--output-model-dir", default="models/experimental", required=False)
+    parser.add_argument("--modeling-approach",
+                        type=str, choices=["space-time", "time-grid"],
+                        help="Strategy for training: 'space-time' (joint) "
+                             "or 'time-grid' (discrete time steps).", required=False)
     return parser.parse_args()
+
 
 if __name__ == "__main__":
     # pars args
@@ -94,6 +99,7 @@ if __name__ == "__main__":
     # check params
     assert hasattr(args,
                    "data_snapshot_filepath") and args.data_snapshot_filepath is not None, "data_snapshot_filepath is None"
+    assert hasattr(args, "modeling_approach") and args.modeling_approach is not None, "modeling_approach is None"
     # checking memory
     assert check_system_memory_and_swap(min_ram_gb=MIN_MEM_GB, min_swap_gb=MIN_SWAP_GB), "low memory, increase! "
     # loads data
@@ -105,45 +111,34 @@ if __name__ == "__main__":
     data_pkl_mem_size_mb = get_inmemory_size_mb(obj=data_snapshot)
     logger.info(f"data pkl size = {np.round(data_pkl_mem_size_mb / 1000.0, 2)} GB")
 
-    # ( 1 ) Starting RegNN training
-    # load training data
-    x = data_snapshot["train"]["l2"]["space-time"]["x"]
-    t = data_snapshot["train"]["l2"]["space-time"]["t"]
-    x_aug = torch.cat([x, t], dim=1)
-    y = data_snapshot["train"]["l2"]["space-time"]["y"]
-    x_aug = x_aug.to(device, data_type)
-    y = y.to(device, data_type)
-
-    logger.info(f"x_aug shape = {x_aug.shape}, y shape = {y.shape}")
-    x_aug_train, x_aug_test, y_train, y_test = train_test_split(
-        x_aug, y, test_size=test_ratio, random_state=SEED, shuffle=True
-    )
-    logger.info(
-        f"x_aug_train/test y_train/test sizes = {x_aug_train.shape}, {x_aug_test.shape}, {y_train.shape}, "
-        f"{y_test.shape}")
-    # x_test =
-    # model arch
-    nn_model = VelocityFieldRegressionNet(input_dim=x_aug_train.shape[1], hidden_dim=nn_hidden_dim,
-                                          output_dim=y_train.shape[1], depth=nn_depth, device=device,
-                                          data_type=data_type)
-    start_time = datetime.now()
-    nn_learning_curve = NeuralNetworkTrainer.run_base_line(model=nn_model, x_train=x_aug_train,
-                                                           y_train=y_train,
-                                                           x_test=x_aug_test, y_test=y_test, batch_size=1024, lr=1e-4,
-                                                           epochs=nn_epochs,
-                                                           lambd=1e-3, min_rel_delta_loss=min_rel_loss_delta,
-                                                           patience=patience)
-
-    end_time = datetime.now()
-    output_model_artifact = {"data_snapshot_filepath": data_snapshot_filepath, "model":
-        nn_model, "model_arch": "nn","opt_algo":"adam","modeling_approach":"space-time", "epochs": nn_epochs, "model_depth": nn_depth,
-                             "batch_size": batch_size, "lr": lr,
-                             "reg_lambda": nn_reg_lambda}
-    data_params = "_".join(f"{k}_{v}" for k, v in data_snapshot["params"].items())
-    output_model_filename = f"vt_nn_spacetime_{dataset_name}_data_params_{data_params}_nn_hidden_dim_{nn_hidden_dim}_{TIMESTAMP}.pkl"
-    output_model_artifact_path = os.path.join(args.output_model_dir, output_model_filename)
-    with open(output_model_artifact_path, "wb") as f:
-        pickle.dump(output_model_artifact, f)
-        f.flush()
-        f.close()
-    logger.info("Successfully saved model to path : {}".format(output_model_artifact_path))
+    if args.modeling_approach == "space-time":
+        logger.info(f"Modling vt using nn as arch and {args.modeling_approach} as an approach")
+        x = data_snapshot["train"]["l2"]["space-time"]["x"]
+        t = data_snapshot["train"]["l2"]["space-time"]["t"]
+        y = data_snapshot["train"]["l2"]["space-time"]["y"]
+        nn_model, learning_curve = \
+            (NeuralNetworkTrainingUtils
+             .train_nn_joint_space_time(x=x, t=t, y=y, nn_hidden_dim=nn_hidden_dim,
+                                        nn_depth=nn_depth, device=device, data_type=data_type, test_ratio=test_ratio,
+                                        seed=SEED, nn_epochs=nn_epochs, min_rel_loss_delta=min_rel_loss_delta,
+                                        patience=patience, batch_size=batch_size, lr=lr, lambd=nn_reg_lambda))
+        output_model_artifact = \
+            {"data_snapshot_filepath": data_snapshot_filepath,
+             "model": nn_model,
+             "model_arch": "nn",
+             "opt_algo": "adam",  # fixme, might need to make it dependent on the code
+             "modeling_approach": args.modeling_approach,
+             "epochs": nn_epochs, "model_depth": nn_depth,
+             "batch_size": batch_size,
+             "lr": lr,
+             "reg_lambda": nn_reg_lambda}
+        data_params = "_".join(f"{k}_{v}" for k, v in data_snapshot["params"].items())
+        output_model_filename = f"vt_nn_spacetime_{dataset_name}_data_params_{data_params}_nn_hidden_dim_{nn_hidden_dim}_{TIMESTAMP}.pkl"
+        output_model_artifact_path = os.path.join(args.output_model_dir, output_model_filename)
+        with open(output_model_artifact_path, "wb") as f:
+            pickle.dump(output_model_artifact, f)
+            f.flush()
+            f.close()
+        logger.info("Successfully saved model to path : {}".format(output_model_artifact_path))
+    else:
+        raise NotImplementedError("Not implemented yet")
