@@ -71,7 +71,7 @@ def parse_args():
 
 TIMESTAMP = datetime.now().isoformat()
 if __name__ == "__main__":
-    # TODO
+    # TODO Split inference / eval / viz to separate pipelines
     # load data snapshot and velocity model
     # do inference
     # plot inferred vs reference samples
@@ -132,11 +132,7 @@ if __name__ == "__main__":
     inference_time_seconds = (end_time - start_time).total_seconds()
     logger.info(f"Inference time = {inference_time_seconds} seconds")
     x1_hat = list(traj)[-1].reshape(x1.shape)
-    Visualizer.plot_three_2d_distributions(x0=x0, x1=x1, x2=x1_hat, label0="init", label1="reference",
-                                           label2="inferred",
-                                           title=f"Distribution comparison : {dataset_name}_{str(data_params)}",
-                                           output_file_name=os.path.join(INFERENCE_FIGURES_DIR,
-                                                                         f"{dataset_name}_data_params_{data_params_flat}_{TIMESTAMP}.png"))
+
     logger.info("Inference and evaluation process finished successfully")
     # sinkhorn loss
     sinkhorn_loss_fn = SamplesLoss(loss="sinkhorn", p=2, blur=0.1)
@@ -153,3 +149,18 @@ if __name__ == "__main__":
         sinkhorn_distance_values.append(sinkhorn_loss_value)
     logger.info(f"Sinkhorn(x1_hat,x1) summary : mean = {np.mean(sinkhorn_distance_values)},"
                 f"std = {np.std(sinkhorn_distance_values)}")
+    # TODO make dataset specific visualization
+    figure_path = os.path.join(INFERENCE_FIGURES_DIR, f"{dataset_name}_data_params_{data_params_flat}_{TIMESTAMP}.png")
+    if dataset_name=="skewed_gaussian_2d":
+        # TODO add model arch and trajectory modeling approach (grid , continous/space-time)
+        Visualizer.plot_with_subplots_gaussian_contour_2d(x0=x0, x1=x1, x1_hat=x1_hat, title="Skewed Gaussian Distribution: Target vs. Inferred Samples", save_path=figure_path)
+    elif dataset_name=="gaussian_mixture_2d":
+        Visualizer.plot_with_subplots_gaussian_mixture_2d(x0=x0, x1=x1, x1_hat=x1_hat, title="Gaussian Mixture : Target vs. Inferred Samples ", save_path=figure_path)
+    else:
+        raise NotImplementedError("dataset_name has not supported viz")
+    #
+    # Visualizer.plot_three_2d_distributions(x0=x0, x1=x1, x2=x1_hat, label0="init", label1="reference",
+    #                                        label2="inferred",
+    #                                        title=f"Distribution comparison : {dataset_name}_{str(data_params)}",
+    #                                        output_file_name=os.path.join(INFERENCE_FIGURES_DIR,
+    #                                                                      f"{dataset_name}_data_params_{data_params_flat}_{TIMESTAMP}.png"))
