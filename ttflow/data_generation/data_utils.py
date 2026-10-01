@@ -9,9 +9,9 @@ from loguru import logger
 from ttflow.data_generation.distributions.many_well import ManyWell_Gaussian
 from ttflow.data_generation.distributions.multivariate_skewnorm import MultivariateSkewGaussian
 from ttflow.viz.viz import Visualizer
-
-FIGURES_DIR = "figures"
-
+from datetime import datetime
+FIGURES_DIR = "figures/data_generation"
+TIME_STAMP = datetime.now().isoformat()
 
 class DataUtils:
     @staticmethod
@@ -260,7 +260,7 @@ class DataUtils:
             shape = kwargs["shape"]
             mvsg = MultivariateSkewGaussian(mean=mean, cov=cov, shape=shape)
             x1 = mvsg.rvs_fast(size=n)
-            Visualizer.plot_density_contours(x=x1, output_filename=os.path.join(FIGURES_DIR,"skewed_gaussian_2d.png"),
+            Visualizer.plot_density_contours(x=x1, output_filename=os.path.join(FIGURES_DIR, f"skewed_gaussian_2d_{TIME_STAMP}.png"),
                                              title=f"skewed gaussian 2d : mean = {mean},cov = {cov},shape = {shape}")
         # keep the return at the end of the method
         # in this case x0 is multivariate iso Gaussian

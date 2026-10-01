@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     end_time = datetime.now()
     output_model_artifact = {"data_snapshot_filepath": data_snapshot_filepath, "model":
-        nn_model, "model_type": "nn", "epochs": nn_epochs, "model_depth": nn_depth,
+        nn_model, "model_arch": "nn","opt_algo":"adam","modeling_approach":"space-time", "epochs": nn_epochs, "model_depth": nn_depth,
                              "batch_size": batch_size, "lr": lr,
                              "reg_lambda": nn_reg_lambda}
     data_params = "_".join(f"{k}_{v}" for k, v in data_snapshot["params"].items())

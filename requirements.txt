@@ -8,3 +8,6 @@ seaborn
 matplotlib
 pandas
 psutil
+torchdiffeq
+geomloss
+datetime
