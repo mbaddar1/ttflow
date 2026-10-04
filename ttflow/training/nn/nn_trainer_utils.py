@@ -156,7 +156,7 @@ class NeuralNetworkTrainingUtils:
     #     return learning_curve
 
     @staticmethod
-    def train_nn_joint_space_time(
+    def train_vt_nn_global_time_model(
             x:torch.Tensor,
             t:torch.Tensor,
             y:torch.Tensor,
@@ -216,5 +216,5 @@ class NeuralNetworkTrainingUtils:
 
         return nn_model,nn_learning_curve
     @staticmethod
-    def train_time_grid_arch():
+    def train_vt_nn_time_piecewise():
         pass

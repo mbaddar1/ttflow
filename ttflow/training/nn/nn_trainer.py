@@ -64,8 +64,8 @@ def parse_args():
         help="Show what would happen without making changes",
     )
     parser.add_argument("--output-model-dir", default="models/experimental", required=False)
-    parser.add_argument("--modeling-approach",
-                        type=str, choices=["space-time", "time-grid"],
+    parser.add_argument("--time-modeling",
+                        type=str, choices=["global", "piecewise"],
                         help="Strategy for training: 'space-time' (joint) "
                              "or 'time-grid' (discrete time steps).", required=False)
     return parser.parse_args()
@@ -97,9 +97,11 @@ if __name__ == "__main__":
     data_snapshot_filepath = args.data_snapshot_filepath
     logger.info(f"Using data snapshot: {data_snapshot_filepath}")
     # check params
+    time_modeling_param_name = "time_modeling"
     assert hasattr(args,
                    "data_snapshot_filepath") and args.data_snapshot_filepath is not None, "data_snapshot_filepath is None"
-    assert hasattr(args, "modeling_approach") and args.modeling_approach is not None, "modeling_approach is None"
+    assert hasattr(args, time_modeling_param_name) and args.__getattribute__(
+        time_modeling_param_name) is not None, f"{time_modeling_param_name} is None"
     # checking memory
     assert check_system_memory_and_swap(min_ram_gb=MIN_MEM_GB, min_swap_gb=MIN_SWAP_GB), "low memory, increase! "
     # loads data
@@ -111,23 +113,23 @@ if __name__ == "__main__":
     data_pkl_mem_size_mb = get_inmemory_size_mb(obj=data_snapshot)
     logger.info(f"data pkl size = {np.round(data_pkl_mem_size_mb / 1000.0, 2)} GB")
 
-    if args.modeling_approach == "space-time":
-        logger.info(f"Modling vt using nn as arch and {args.modeling_approach} as an approach")
+    if args.time_modeling == "global":
+        logger.info(f"Modling vt using nn as arch and {args.__getattribute__(time_modeling_param_name)} as an approach")
         x = data_snapshot["train"]["l2"]["space-time"]["x"]
         t = data_snapshot["train"]["l2"]["space-time"]["t"]
         y = data_snapshot["train"]["l2"]["space-time"]["y"]
         nn_model, learning_curve = \
             (NeuralNetworkTrainingUtils
-             .train_nn_joint_space_time(x=x, t=t, y=y, nn_hidden_dim=nn_hidden_dim,
-                                        nn_depth=nn_depth, device=device, data_type=data_type, test_ratio=test_ratio,
-                                        seed=SEED, nn_epochs=nn_epochs, min_rel_loss_delta=min_rel_loss_delta,
-                                        patience=patience, batch_size=batch_size, lr=lr, lambd=nn_reg_lambda))
+             .train_vt_nn_global_time_model(x=x, t=t, y=y, nn_hidden_dim=nn_hidden_dim,
+                                            nn_depth=nn_depth, device=device, data_type=data_type, test_ratio=test_ratio,
+                                            seed=SEED, nn_epochs=nn_epochs, min_rel_loss_delta=min_rel_loss_delta,
+                                            patience=patience, batch_size=batch_size, lr=lr, lambd=nn_reg_lambda))
         output_model_artifact = \
             {"data_snapshot_filepath": data_snapshot_filepath,
              "model": nn_model,
              "model_arch": "nn",
              "opt_algo": "adam",  # fixme, might need to make it dependent on the code
-             "modeling_approach": args.modeling_approach,
+             "modeling_approach": args.__getattribute__(time_modeling_param_name),
              "epochs": nn_epochs, "model_depth": nn_depth,
              "batch_size": batch_size,
              "lr": lr,
@@ -140,5 +142,6 @@ if __name__ == "__main__":
             f.flush()
             f.close()
         logger.info("Successfully saved model to path : {}".format(output_model_artifact_path))
-    else:
+    elif args.__getattribute__(time_modeling_param_name) =="piecewise":
+        # we will use the raw inference data x0,x1 as the training process will interleave with ODESOLVE
         raise NotImplementedError("Not implemented yet")
