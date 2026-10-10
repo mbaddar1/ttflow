@@ -15,7 +15,7 @@ TIME_STAMP = datetime.now().isoformat()
 
 class DataUtils:
     @staticmethod
-    def rectified_flow_get_l2_xy(x0=None, x1=None, time_grid=None):
+    def get_rectified_flow_get_l2_data(z0, z1, zt_mode:str):
         """
         This function is to get training input and output for the v(t) model
         See https://arxiv.org/pdf/2209.03003 eq (1)
@@ -26,24 +26,20 @@ class DataUtils:
         @param z1:
         @return:
         """
-        assert len(x0.shape) == 2
-        assert len(x1.shape) == 2
-        for i in range(len(x0.shape)):
-            assert x0.shape[i] == x1.shape[i]
-        if time_grid is None:
-            t = torch.rand((x1.shape[0], 1)).type(x0.dtype).to(x0.device)
-            x_t = t * x1 + (1. - t) * x0
-            target = x1 - x0
-            return x_t, t, target
+        assert z0 is not None
+        assert z1 is not None
+        assert len(z0.shape) == 2
+        assert len(z1.shape) == 2
+        for i in range(len(z0.shape)):
+            assert z0.shape[i] == z1.shape[i]
+
+        t = torch.rand((z1.shape[0], 1)).type(z0.dtype).to(z0.device)
+        y = z1 - z0
+        if zt_mode == "linear":
+            z_t = t * z1 + (1. - t) * z0
         else:
-            # return list of z_t of length t_grid , each of tensor of shape z1.shape (z0.shape)
-            x_t_list = []
-            for t in tqdm(time_grid, desc="generating xt_grid (over the time-grid)"):
-                x_t = t * x1 + (1. - t) * x0
-                x_t_list.append(x_t)
-            assert len(x_t_list) == len(time_grid)
-            target = x1 - x0
-            return x_t_list, target
+            NotImplementedError(f"xt_mode {zt_mode} not implemented")
+        return z_t, t, y
 
     @staticmethod
     def transform_to_masking_data(x: torch.Tensor, y: torch.Tensor):
@@ -187,8 +183,8 @@ class DataUtils:
         return x0, x1
 
     @staticmethod
-    def rectified_flows_get_inference_x0x1(x_dim: int, y_dim: int, dataset_name: str, n: int, noise: float = 0.01,
-                                           random_state: int = 42, data_type=torch.float64, **kwargs):
+    def get_transport_data(x_dim: int, y_dim: int, dataset_name: str, n: int, noise: float = 0.01,
+                           random_state: int = 42, data_type=torch.float64, **kwargs):
         if dataset_name == "make_regression":
             x, y = make_regression(
                 n_samples=n,
@@ -228,9 +224,9 @@ class DataUtils:
         elif dataset_name == "moons":
             x1, _ = make_moons(n_samples=n, noise=noise)
         elif dataset_name == "manywell":
-            assert "dim" in kwargs.keys() and isinstance(kwargs["dim"], int)
+            assert "data_dim" in kwargs.keys() and isinstance(kwargs["data_dim"], int)
             assert "many_well_dim" in kwargs.keys() and isinstance(kwargs["many_well_dim"], int)
-            many_well_gaussian_dist = ManyWell_Gaussian(dim=kwargs["dim"], many_well_dim=kwargs["many_well_dim"],
+            many_well_gaussian_dist = ManyWell_Gaussian(dim=kwargs["data_dim"], many_well_dim=kwargs["many_well_dim"],
                                                         normalised=True, use_gpu=False)
             x1 = many_well_gaussian_dist.sample([n])
         elif dataset_name == "gaussian_mixture_2d":

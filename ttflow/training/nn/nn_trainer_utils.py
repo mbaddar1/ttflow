@@ -1,29 +1,26 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.model_selection import train_test_split
 from torch.nn import MSELoss
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 from loguru import logger
-"""
-Reference Impl. 
-https://colab.research.google.com/drive/1CyUP5xbA3pjH55HDWOA8vRgk2EEyEl_P?usp=sharing
-"""
 
 
 
-class NeuralNetworkTrainer:
+
+class NeuralNetworkTrainingUtils:
     @staticmethod
-    def train(
+    def train_nn(
             model: torch.nn.Module,
+            optimizer: torch.optim.Optimizer,
             x_train: torch.Tensor,
             y_train: torch.Tensor,
             x_test: torch.Tensor,
             y_test: torch.Tensor,
             batch_size: int,
-            lr: float,
             epochs: int,
-            lambd: float,
             min_rel_loss_delta: float,
             patience: int,
     ) -> dict:
@@ -36,7 +33,6 @@ class NeuralNetworkTrainer:
         test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
         loss_fn = nn.MSELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=lambd)
 
         learning_curve = {"train": [], "test": []}
         loss_delta_rel = np.inf
@@ -62,6 +58,11 @@ class NeuralNetworkTrainer:
         logger.info(
             f"@epoch = 0 (before training), loss_fn = {loss_fn}, loss_value = {init_test_loss:.6f}"
         )
+
+        # training loop
+        with torch.no_grad():
+            y_pred_test = model(x_test)
+            logger.info(f"MSELoss(test) before training:{MSELoss()(y_test, y_pred_test)}")
 
         for epoch in tqdm(range(epochs), desc="Epoch"):
             # --- Training ---
@@ -122,21 +123,9 @@ class NeuralNetworkTrainer:
                 f"loss_stagnation_count = {loss_stagnation_count}"
             )
 
-        assert len(learning_curve["train"]) == len(learning_curve["test"])
-        return learning_curve
-
-    @staticmethod
-    def run_base_line(model: torch.nn.Module, x_train: torch.tensor, y_train: torch.tensor, x_test: torch.Tensor,
-                      y_test: torch.Tensor, batch_size: int, lr: float, epochs, lambd: float
-                      , min_rel_delta_loss: float, patience: int) -> dict:
-        # before train
-        y_pred_test = model(x_test)
-        logger.info(f"MSELoss(test) before training:{MSELoss()(y_test, y_pred_test)}")
-        learning_curve = NeuralNetworkTrainer.train(model=model, x_train=x_train, y_train=y_train, x_test=x_test,
-                                                    y_test=y_test,
-                                                    batch_size=batch_size, lr=lr, epochs=epochs, lambd=lambd,
-                                                    min_rel_loss_delta=min_rel_delta_loss, patience=patience)
         # after train
         y_pred_test = model(x_test)
-        logger.info(f"MSELoss(test) after training :{MSELoss()(y_test, y_pred_test)}")
+        logger.info(f"MSELoss(test) after training:{MSELoss()(y_test, y_pred_test)}")
+
+        assert len(learning_curve["train"]) == len(learning_curve["test"])
         return learning_curve
