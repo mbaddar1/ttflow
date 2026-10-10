@@ -15,7 +15,7 @@ TIME_STAMP = datetime.now().isoformat()
 
 class DataUtils:
     @staticmethod
-    def rectified_flow_get_l2_data(z0, z1, zt_mode:str):
+    def get_rectified_flow_get_l2_data(z0, z1, zt_mode:str):
         """
         This function is to get training input and output for the v(t) model
         See https://arxiv.org/pdf/2209.03003 eq (1)

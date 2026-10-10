@@ -46,37 +46,6 @@ class DataSnapShotUtils:
         logger.info(f"Finished generating samples for {dataset_name}")
         return data_snapshot_dict
 
-        return data_snapshot_dict
-
-        # FIXME , remove this bulk of code
-        # data_snapshot_dict = {"dataset_name": dataset_name,"params":kwargs}
-        # for split in data_splits:
-        #
-        #
-        # ######
-        # x0, x1 = DataUtils.rectified_flows_get_x0_x1(x_dim=x_dim, y_dim=y_dim, dataset_name=dataset_name,
-        #                                              n=n_train, **kwargs)
-        # data_snapshot_dict ["train"]={"x0": x0, "x1": x1}
-        #
-        # x0_train,x0_test,x1_train,x1_test  = train_test_split(x0.detach().numpy(), x1.detach().numpy(),
-        #                                                       train_size=n_train,test_size=n_test)
-        # data_snapshot_dict = {"dataset_name": dataset_name, "train": {"x0": x0, "x1": x1}}
-        # logger.info(
-        #     f"Generated eval(inference)  data with x0.shape = {x0.shape}, x1.shape = {x1.shape}, y.shape = {y.shape}")
-        #
-        # # ( 2 ) Generate train dataset for space-time arch for v(x(t),t) = G1G2 .. GdGt
-        # logger.info(f"Generating data for space-time arch (param-efficient)...")
-        # x0, x1 = DataUtils.rectified_flows_get_x0_x1(x_dim=x_dim, y_dim=y_dim, dataset_name=dataset_name,
-        #                                              n=n_train_test, **kwargs)
-        # # visualize init and target distribution
-        # plot_file_name = os.path.join(DATA_GENERATION_FIGURES_DIR, f"{dataset_name}_params_{kwargs}.png")
-        # plot_title = f"{dataset_name}_{kwargs}"
-        # Visualizer.plot_two_2d_distributions(x0=x0, x1=x1, output_file_name=plot_file_name, title=plot_title)
-        # x, t, y = DataUtils.rectified_flow_get_l2_data(z0=x0, z1=x1, zt_mode=zt_mode)
-        # data_snapshot_dict["train"] = {"l2":{"space-time": {"x": x, "t": t, "y": y}}}
-        # logger.info(f"Finished generating train-data for space-time rch (param-efficient) "
-        #             f"with x.shape = {x.shape}, t.shape = {t.shape}")
-        # return data_snapshot_dict
 
     @staticmethod
     def generate_manywell_snapshot(total_data_dim: int, manywell_dim: int, n_train_test: int, n_eval: int,
@@ -106,13 +75,13 @@ class DataSnapShotUtils:
                                               dim=total_data_dim,
                                               many_well_dim=manywell_dim,
                                               n=n_train_test)
-        x, t, y = DataUtils.rectified_flow_get_l2_data(z0=x0, z1=x1, time_grid=None)
+        x, t, y = DataUtils.get_rectified_flow_get_l2_data(z0=x0, z1=x1, time_grid=None)
         data_snapshot_dict["train"] = {"l2": {"global-time": {"x": x, "t": t, "y": y}},
                                        "inference": {"x0": x0, "x1": x1}}
         logger.info(f"Finished generating train-data for space-time rch (param-efficient) "
                     f"with x.shape = {x.shape}, t.shape = {t.shape}")
         # ( 3 ) Generate train data-snapshot for v(x(t),t) \approx v_n(x(tn)) where each v_n(x(tn)) is trained individually
-        x_grid, y = DataUtils.rectified_flow_get_l2_data(z0=x0, z1=x1, time_grid=time_grid)
+        x_grid, y = DataUtils.get_rectified_flow_get_l2_data(z0=x0, z1=x1, time_grid=time_grid)
         data_snapshot_dict["train"]["l2"]["time-grid"] = {"x_grid": x_grid, "time_grid": time_grid, "y": y}
         return data_snapshot_dict
 
@@ -129,7 +98,7 @@ class DataSnapShotUtils:
         logger.info(f"Generating eval data...")
         x0, x1 = DataUtils.get_transport_data(x_dim=x_dim, y_dim=y_dim, dataset_name=dataset_name,
                                               n=n_eval, time_grid=None, num_components=num_components)
-        x, t, y = DataUtils.rectified_flow_get_l2_data(x0, x1, time_grid=None)
+        x, t, y = DataUtils.get_rectified_flow_get_l2_data(x0, x1, time_grid=None)
         data_snapshot_dict = {"dataset_name": dataset_name, "params": {"num_components": num_components},
                               "eval": {"l2": {"x": x, "t": t, "y": y}, "inference": {"x0": x0, "x1": x1}},
                               "data_dim": 2,
@@ -145,11 +114,11 @@ class DataSnapShotUtils:
                                              output_file_name=
                                              os.path.join(DATA_GENERATION_FIGURES_DIR,
                                                           f"gaussian_mixture_2d_ncomp_{num_components}_{TIMESTAMP}.png"))
-        x, t, y = DataUtils.rectified_flow_get_l2_data(x0, x1, time_grid=None)
+        x, t, y = DataUtils.get_rectified_flow_get_l2_data(x0, x1, time_grid=None)
         data_snapshot_dict["train"]["l2"] = {"space-time": {"x": x, "t": t, "y": y}}
         logger.info(f"Finished generating train-data for space-time arch (param-efficient) "
                     f"with x.shape = {x.shape}, t.shape = {t.shape}")
         # ( 3 ) Generate train data-snapshot for v(x(t),t) \approx v_n(x(tn)) where each v_n(x(tn)) is trained individually
-        x_grid, y = DataUtils.rectified_flow_get_l2_data(z0=x0, z1=x1, time_grid=time_grid)
+        x_grid, y = DataUtils.get_rectified_flow_get_l2_data(z0=x0, z1=x1, time_grid=time_grid)
         data_snapshot_dict["train"]["l2"]["time-grid"] = {"x_grid": x_grid, "time_grid": time_grid, "y": y}
         return data_snapshot_dict

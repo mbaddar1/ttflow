@@ -6,14 +6,7 @@ from torch.nn import MSELoss
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 from loguru import logger
-from datetime import datetime
 
-from ttflow.training.nn.nn_models import VelocityFieldRegressionNet
-
-"""
-Reference Impl. 
-https://colab.research.google.com/drive/1CyUP5xbA3pjH55HDWOA8vRgk2EEyEl_P?usp=sharing
-"""
 
 
 
@@ -21,14 +14,13 @@ class NeuralNetworkTrainingUtils:
     @staticmethod
     def train_nn(
             model: torch.nn.Module,
+            optimizer: torch.optim.Optimizer,
             x_train: torch.Tensor,
             y_train: torch.Tensor,
             x_test: torch.Tensor,
             y_test: torch.Tensor,
             batch_size: int,
-            lr: float,
             epochs: int,
-            lambd: float,
             min_rel_loss_delta: float,
             patience: int,
     ) -> dict:
@@ -41,7 +33,6 @@ class NeuralNetworkTrainingUtils:
         test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
         loss_fn = nn.MSELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=lambd)
 
         learning_curve = {"train": [], "test": []}
         loss_delta_rel = np.inf
@@ -138,83 +129,3 @@ class NeuralNetworkTrainingUtils:
 
         assert len(learning_curve["train"]) == len(learning_curve["test"])
         return learning_curve
-    # FIXME, redundant method, remove later
-    # @staticmethod
-    # def train_nn(model: torch.nn.Module, x_train: torch.tensor, y_train: torch.tensor, x_test: torch.Tensor,
-    #              y_test: torch.Tensor, batch_size: int, lr: float, epochs, lambd: float
-    #              , min_rel_delta_loss: float, patience: int) -> dict:
-    #     # before train
-    #     y_pred_test = model(x_test)
-    #     logger.info(f"MSELoss(test) before training:{MSELoss()(y_test, y_pred_test)}")
-    #     learning_curve = NeuralNetworkTrainingUtils.train(model=model, x_train=x_train, y_train=y_train, x_test=x_test,
-    #                                                       y_test=y_test,
-    #                                                       batch_size=batch_size, lr=lr, epochs=epochs, lambd=lambd,
-    #                                                       min_rel_loss_delta=min_rel_delta_loss, patience=patience)
-    #     # after train
-    #     y_pred_test = model(x_test)
-    #     logger.info(f"MSELoss(test) after training :{MSELoss()(y_test, y_pred_test)}")
-    #     return learning_curve
-
-    @staticmethod
-    def train_vt_nn_global_time_model(
-            x:torch.Tensor,
-            t:torch.Tensor,
-            y:torch.Tensor,
-            device:torch.device,
-            data_type:torch.dtype,
-            test_ratio:float,
-            seed:int,
-            nn_hidden_dim:int,
-            nn_depth:int,
-            nn_epochs:int,
-            min_rel_loss_delta:float,
-            patience:int,
-            batch_size:int,
-            lr:float,
-            lambd:float
-    ):
-
-        x_aug = torch.cat([x, t], dim=1)
-        x_aug = x_aug.to(device, data_type)
-        y = y.to(device, data_type)
-
-        logger.info(f"x_aug shape = {x_aug.shape}, y shape = {y.shape}")
-        x_aug_train, x_aug_test, y_train, y_test = train_test_split(
-            x_aug, y, test_size=test_ratio, random_state=seed, shuffle=True
-        )
-        logger.info(
-            f"x_aug_train/test y_train/test sizes = {x_aug_train.shape}, {x_aug_test.shape}, {y_train.shape}, "
-            f"{y_test.shape}"
-        )
-
-        # model arch
-        nn_model = VelocityFieldRegressionNet(
-            input_dim=x_aug_train.shape[1],
-            hidden_dim=nn_hidden_dim,
-            output_dim=y_train.shape[1],
-            depth=nn_depth,
-            device=device,
-            data_type=data_type,
-        )
-        start_time = datetime.now()
-        nn_learning_curve = NeuralNetworkTrainingUtils.train_nn(
-            model=nn_model,
-            x_train=x_aug_train,
-            y_train=y_train,
-            x_test=x_aug_test,
-            y_test=y_test,
-            batch_size=batch_size,
-            lr=lr,
-            epochs=nn_epochs,
-            lambd=lambd,
-            min_rel_loss_delta=min_rel_loss_delta,
-            patience=patience,
-        )
-
-        end_time = datetime.now()
-        logger.info(f"Training nn finished in {(end_time - start_time).seconds} seconds")
-
-        return nn_model,nn_learning_curve
-    @staticmethod
-    def train_vt_nn_time_piecewise():
-        pass

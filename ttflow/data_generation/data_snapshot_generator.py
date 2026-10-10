@@ -35,7 +35,7 @@ GAUSSIAN_MIXTURE_2D_NUM_COMPONENTS_PARAM_NAME = "gaussian_mixture_2d_num_compone
 # main args
 parser.add_argument("--n-train", type=int, default=500_000,
                     help="Number of training samples (keep large, may subsample later)", required=False)
-parser.add_argument("--n-test", type=int, default=500_000,
+parser.add_argument("--n-test", type=int, default=200_000,
                     help="Number of training samples (keep large, may subsample later)", required=False)
 parser.add_argument("--n-eval", type=int, default=200_000,
                     help="Number of test samples", required=False)
@@ -114,34 +114,33 @@ if __name__ == "__main__":
         n_comp = passed_arg if has_arg and passed_arg else 3
         data_snapshot_dict = (DataSnapShotUtils.
                               generate_transport_data_snapshot(dataset_name=dataset_name,
-                                                                                x_dim=data_dim, y_dim=data_dim,
-                                                                                n_train=args.n_train,
-                                                                                n_test=args.n_test, n_eval=args.n_eval,
-                                                                                num_components=n_comp))
+                                                               x_dim=data_dim, y_dim=data_dim,
+                                                               n_train=args.n_train,
+                                                               n_test=args.n_test, n_eval=args.n_eval,
+                                                               num_components=n_comp))
         snapshot_file_name = (f"data_snapshot_{dataset_name}"
                               f"_ncomp_{n_comp}"
                               f"_data_dim_{data_dim}"
                               f"_n_train_test_eval_{args.n_train}_{args.n_test}_{args.n_eval}.pkl")
     # TODO add skewed Gaussian
     elif dataset_name == "skewed_gaussian_2d":
-        raise NotImplementedError("modify implementation")
         dist_params = ["mean", "cov", "shape"]
-        assert all(dist_param in dist_params for dist_param in ["mean", "cov", "shape"]), \
-            f"for dataset_name = {dataset_name}, must pass params {dist_params}"
+        assert all(hasattr(args, dist_param) for dist_param in dist_params)
         x_dim = 2
         y_dim = 2
         kwargs = {"mean": args.mean, "cov": args.cov, "shape": args.shape}
         data_snapshot_dict = DataSnapShotUtils.generate_transport_data_snapshot(dataset_name=dataset_name,
                                                                                 x_dim=x_dim, y_dim=y_dim,
-                                                                                n_train_test=args.n_train_test,
-                                                                                n_eval=n_eval, time_grid=time_grid,
+                                                                                n_train=args.n_train,
+                                                                                n_test=args.n_test, n_eval=args.n_eval,
                                                                                 **kwargs)
         snapshot_file_name = (f"data_snapshot_{dataset_name}"
                               f"_mean_{str(kwargs["mean"])}"
                               f"_cov_{str(kwargs["cov"])}"
                               f"_shape_{kwargs["shape"]}"
-                              f"_n_train_test_{n_train_test}_n_eval_{args.n_eval}"
-                              f"_ntimegrid_{n_time_grid}_timestamp_{TIMESTAMP}.pkl")
+                              f"_n_train_{args.n_train}"
+                              f"_n_test_{args.n_test}"
+                              f"_n_eval_{args.n_eval}.pkl")
     else:
         raise ValueError(f"dataset_name {dataset_name} not supported")
     logger.info(f"Saving snapshot file...")

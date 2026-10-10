@@ -14,6 +14,7 @@ import numpy as np
 INFERENCE_FIGURES_DIR = "figures/inference/experimental"
 INFERENCE_LOGS_DIR = "logs/inference"
 
+
 class InferenceHandler:
     def __init__(self, x_shape: Tuple[int, int], model: torch.nn.Module):
         self.x_shape = x_shape
@@ -23,6 +24,7 @@ class InferenceHandler:
     def infer(self, x0: torch.Tensor, t_eval: torch.Tensor,
               rtol: float = 1e-7,
               atol: float = 1e-9, method: Optional[str] = None) -> Iterable[torch.Tensor]:
+        # TODO handle global and piecewise linear trajectory
         x0_flat = x0.ravel()
         traj = odeint(func=self.__fnn, y0=x0_flat, t=t_eval, method=method, rtol=rtol, atol=atol)
         return traj
@@ -61,7 +63,7 @@ def parse_args():
     parser.add_argument(
         "--odesolve-method",
         type=str,
-        choices=["rk4"],# FIXME add more
+        choices=["rk4"],  # FIXME add more
         default="rk4",
         help="ODESOLVE method for inference",
         required=False
@@ -101,8 +103,8 @@ if __name__ == "__main__":
 
     logger.info("Successfully loaded vt_artifact and the linked data snapshot")
     # do inference
-    x0 = data_snapshot["eval"]["inference"]["x0"]
-    x1 = data_snapshot["eval"]["inference"]["x1"]
+    x0 = data_snapshot["eval"]["x0"]
+    x1 = data_snapshot["eval"]["x1"]
 
     for j in range(len(x0.shape)):
         assert x0.shape[j] == x1.shape[j]
@@ -143,24 +145,33 @@ if __name__ == "__main__":
 
     num_sinkhorn_iterations = 10
     sinkhorn_distance_values = []
-    logger.info(f"Calculating sinkhorn-distance over {num_sinkhorn_iterations} iterations.")
+
+    assert len(x1_hat.shape) == len(x1.shape)
+    assert len(x1.shape) == 2
+    for j in range(len(x1.shape)):
+        assert x1.shape[j] == x1_hat.shape[j]
+    logger.info(f"x0.shape = {x0.shape} , {x1.shape} , {x1_hat.shape}")
+    n_subsample = x1.shape[0] // 4
+    logger.info(f"Bootstrap calculations for sinkhorn-distance over {num_sinkhorn_iterations} "
+                f"iterations, with n_subsample = {n_subsample} out of n_samples = {x1.shape[0]}")
+    # sinkhorn calculations
     for iteration in tqdm(range(num_sinkhorn_iterations), desc="sinkhorn-calculations"):
-        sinkhorn_loss_value = sinkhorn_loss_fn(x1_hat, x1).item()
+        i_idx = torch.randperm(x1.shape[0], device=x1.device)[:n_subsample]
+        sinkhorn_loss_value = sinkhorn_loss_fn(x1_hat[i_idx, :], x1[i_idx, :]).item()
+        logger.info(f"@Iteration # {(iteration + 1)}, sinkhorn_loss_value = {sinkhorn_loss_value}")
         sinkhorn_distance_values.append(sinkhorn_loss_value)
     logger.info(f"Sinkhorn(x1_hat,x1) summary : mean = {np.mean(sinkhorn_distance_values)},"
                 f"std = {np.std(sinkhorn_distance_values)}")
     # TODO make dataset specific visualization
     figure_path = os.path.join(INFERENCE_FIGURES_DIR, f"{dataset_name}_data_params_{data_params_flat}_{TIMESTAMP}.png")
-    if dataset_name=="skewed_gaussian_2d":
+    if dataset_name == "skewed_gaussian_2d":
         # TODO add model arch and trajectory modeling approach (grid , continous/space-time)
-        Visualizer.plot_with_subplots_gaussian_contour_2d(x0=x0, x1=x1, x1_hat=x1_hat, title="Skewed Gaussian Distribution: Target vs. Inferred Samples", save_path=figure_path)
-    elif dataset_name=="gaussian_mixture_2d":
-        Visualizer.plot_with_subplots_gaussian_mixture_2d(x0=x0, x1=x1, x1_hat=x1_hat, title="Gaussian Mixture : Target vs. Inferred Samples ", save_path=figure_path)
+        Visualizer.plot_with_subplots_gaussian_contour_2d(x0=x0, x1=x1, x1_hat=x1_hat,
+                                                          title="Skewed Gaussian Distribution: Target vs. Inferred Samples",
+                                                          save_path=figure_path)
+    elif dataset_name == "gaussian_mixture_2d":
+        Visualizer.plot_with_subplots_gaussian_mixture_2d(x0=x0, x1=x1, x1_hat=x1_hat,
+                                                          title="Gaussian Mixture : Target vs. Inferred Samples ",
+                                                          save_path=figure_path)
     else:
         raise NotImplementedError("dataset_name has not supported viz")
-    #
-    # Visualizer.plot_three_2d_distributions(x0=x0, x1=x1, x2=x1_hat, label0="init", label1="reference",
-    #                                        label2="inferred",
-    #                                        title=f"Distribution comparison : {dataset_name}_{str(data_params)}",
-    #                                        output_file_name=os.path.join(INFERENCE_FIGURES_DIR,
-    #                                                                      f"{dataset_name}_data_params_{data_params_flat}_{TIMESTAMP}.png"))
