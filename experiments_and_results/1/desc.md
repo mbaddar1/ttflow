@@ -194,7 +194,7 @@ Epoch:  98%|█████████▊| 98/100 [05:18<00:06,  3.05s/it]2026-
 Epoch:  99%|█████████▉| 99/100 [05:21<00:03,  3.07s/it]2026-10-11 13:38:46.039 | INFO     | ttflow.training.nn.nn_trainer_utils:train_nn:119 - @epoch = 100, smoothed-train-loss = 8.118062 | smoothed-test-loss = 8.053883 | rel_loss_delta = 5.769947765482802e-05 | loss_stagnation_count = 0
 Epoch: 100%|██████████| 100/100 [05:24<00:00,  3.25s/it]
 2026-10-11 13:38:46.044 | INFO     | ttflow.training.nn.nn_trainer_utils:train_nn:128 - MSELoss(test) after training:8.052794456481934
-2026-10-11 13:38:46.045 | INFO     | __main__:<module>:287 - Output model artifact saved to = models/experimental/vt_dataset_gaussian_mixture_2d_data_params_num_components_4_trajectory_model_global_func_model_nn_model_hyperparams_hidden_dim_128_depth_2_opt_adam_nn_hidden_dim_128_timestamp_2026-10-11T13:33:19.292751.pkl
+2026-10-11 13:38:46.045 | INFO     | __mai![gaussian_mixture_2d_data_params_num_components_4_2026-10-11T13:52:27.319265.png](gaussian_mixture_2d_data_params_num_components_4_2026-10-11T13%3A52%3A27.319265.png)n__:<module>:287 - Output model artifact saved to = models/experimental/vt_dataset_gaussian_mixture_2d_data_params_num_components_4_trajectory_model_global_func_model_nn_model_hyperparams_hidden_dim_128_depth_2_opt_adam_nn_hidden_dim_128_timestamp_2026-10-11T13:33:19.292751.pkl
 2026-10-11 13:38:46.045 | INFO     | __main__:<module>:288 - vt training process finished successfully.
 
 Process finished with exit code 0
