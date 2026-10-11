@@ -132,10 +132,10 @@ if __name__ == "__main__":
     traj = inference_handler.infer(x0=x0, t_eval=t_eval, method=odesolve_method)
     end_time = datetime.now()
     inference_time_seconds = (end_time - start_time).total_seconds()
-    logger.info(f"Inference time = {inference_time_seconds} seconds")
+    logger.info(
+        f"Inference x0->x1_hat | n_sample_infernce = {x0.shape[0]} | inference time = {inference_time_seconds} seconds")
     x1_hat = list(traj)[-1].reshape(x1.shape)
 
-    logger.info("Inference and evaluation process finished successfully")
     # sinkhorn loss
     sinkhorn_loss_fn = SamplesLoss(loss="sinkhorn", p=2, blur=0.1)
 
@@ -160,8 +160,16 @@ if __name__ == "__main__":
         sinkhorn_loss_value = sinkhorn_loss_fn(x1_hat[i_idx, :], x1[i_idx, :]).item()
         logger.info(f"@Iteration # {(iteration + 1)}, sinkhorn_loss_value = {sinkhorn_loss_value}")
         sinkhorn_distance_values.append(sinkhorn_loss_value)
-    logger.info(f"Sinkhorn(x1_hat,x1) summary : mean = {np.mean(sinkhorn_distance_values)},"
-                f"std = {np.std(sinkhorn_distance_values)}")
+    logger.info(
+        "Sinkhorn(x1_hat, x1) summary | "
+        f"Iterations: {num_sinkhorn_iterations} | "
+        f"Inference samples: {x1.shape[0]} | "
+        f"Subsamples: {n_subsample} | "
+        f"Mean: {np.mean(sinkhorn_distance_values):.4f} | "
+        f"Std: {np.std(sinkhorn_distance_values):.4f} |"
+        f"Inference time for total number of inference samples: {inference_time_seconds} seconds"
+    )
+
     # TODO make dataset specific visualization
     figure_path = os.path.join(INFERENCE_FIGURES_DIR, f"{dataset_name}_data_params_{data_params_flat}_{TIMESTAMP}.png")
     if dataset_name == "skewed_gaussian_2d":
@@ -175,3 +183,5 @@ if __name__ == "__main__":
                                                           save_path=figure_path)
     else:
         raise NotImplementedError("dataset_name has not supported viz")
+
+    logger.info(f"Inference and evaluation process finished successfully!")
