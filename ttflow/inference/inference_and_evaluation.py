@@ -160,8 +160,15 @@ if __name__ == "__main__":
         sinkhorn_loss_value = sinkhorn_loss_fn(x1_hat[i_idx, :], x1[i_idx, :]).item()
         logger.info(f"@Iteration # {(iteration + 1)}, sinkhorn_loss_value = {sinkhorn_loss_value}")
         sinkhorn_distance_values.append(sinkhorn_loss_value)
-    logger.info(f"Sinkhorn(x1_hat,x1) summary : mean = {np.mean(sinkhorn_distance_values)},"
-                f"std = {np.std(sinkhorn_distance_values)}")
+    logger.info(
+        "Sinkhorn(x1_hat, x1) summary | "
+        f"Iterations: {num_sinkhorn_iterations} | "
+        f"Inference samples: {x1.shape[0]} | "
+        f"Subsamples: {n_subsample} | "
+        f"Mean: {np.mean(sinkhorn_distance_values):.4f} | "
+        f"Std: {np.std(sinkhorn_distance_values):.4f}"
+    )
+
     # TODO make dataset specific visualization
     figure_path = os.path.join(INFERENCE_FIGURES_DIR, f"{dataset_name}_data_params_{data_params_flat}_{TIMESTAMP}.png")
     if dataset_name == "skewed_gaussian_2d":
