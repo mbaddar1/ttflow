@@ -104,19 +104,19 @@ def parse_args():
     parser.add_argument(
         "--nn-hidden-dim",
         type=int,
-        default=512,
+        default=128,
         help="Hidden dimension size of the neural network (default: 128)",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=512,
+        default=2048,
         help="Batch size for training (default: 2048)",
     )
     parser.add_argument(
         "--nn-depth",
         type=int,
-        default=4,
+        default=2,
         help="Number of layers in the neural network (default: 2)",
     )
     parser.add_argument(
@@ -229,24 +229,47 @@ if __name__ == "__main__":
                                                             n_samples=z1_test.shape[0]).to(dtype=data_type,
                                                                                            device=device)
 
-
                 nn_models = []  # TODO - for tracking only, always use the last model in global reflow
                 learning_curves = []  # for each reflowed model
+                # train on z0,z1 (train and test)
+                nn_model = VelocityFieldRegressionNet(
+                    input_dim=z0_train.shape[1] + 1,
+                    hidden_dim=args.nn_hidden_dim,
+                    output_dim=z0_train.shape[1],
+                    depth=args.nn_depth,
+                    device=device,
+                    data_type=data_type,
+                )
 
-                for reflow_iteration in tqdm(range(args.reflow_iterations+1), desc="reflow iterations"):
-                    # train on z0,z1 (train and test)
-                    nn_model = VelocityFieldRegressionNet(
-                        input_dim=z0_train.shape[1] + 1,
-                        hidden_dim=args.nn_hidden_dim,
-                        output_dim=z0_train.shape[1],
-                        depth=args.nn_depth,
-                        device=device,
-                        data_type=data_type,
-                    )
-
-                    nn_optimizer = torch.optim.AdamW(
-                        nn_model.parameters(), lr=args.lr, weight_decay=args.nn_reg_lambda
-                    )
+                nn_optimizer = torch.optim.Adam(
+                    nn_model.parameters(), lr=args.lr, weight_decay=args.nn_reg_lambda
+                )
+                logger.info(
+                    "***********************************************************"
+                    "Training Model Specs:\n"
+                    f"  [Model Architecture]\n"
+                    f"    - model =                   {nn_model}\n"
+                    f"    - Input Dim:                {z0_train.shape[1] + 1}\n"
+                    f"    - Hidden Dim:               {args.nn_hidden_dim}\n"
+                    f"    - Output Dim:               {z0_train.shape[1]}\n"
+                    f"    - Depth:                    {args.nn_depth}\n"
+                    f"    - Device:                   {device}\n"
+                    f"    - Data Type:                {data_type}\n"
+                    f"  [Optimizer Specs]\n"
+                    f"    - Optimizer :               {nn_optimizer}:\n"
+                    f"    - Learning Rate:            {args.lr}\n"
+                    f"    - Weight Decay (lambda):    {args.nn_reg_lambda}\n"
+                    f"  [Training Params]\n"
+                    f"    - Epochs:                   {nn_epochs}\n"
+                    f"    - Batch Size:               {args.batch_size}\n"
+                    f"    - Patience:                 {args.patience}\n"
+                    f"    - Min Rel Loss Delta:       {args.min_rel_loss_delta}\n"
+                    f"    - ZT Mode:                  {args.rectification_linearity}\n"
+                    f"    - Reflow Iterations:  {args.reflow_iterations}"
+                    "**********************************************************"
+                )
+                for reflow_iteration in tqdm(range(args.reflow_iterations + 1), desc="reflow iterations"):
+                    logger.info("Reflow iteration: {}".format(reflow_iteration))
                     learning_curve = VTTrainerUtils.reflow_nn_train(model=nn_model, optimizer=nn_optimizer,
                                                                     z0_train=z0_train, z1_train=z1_train,
                                                                     z0_test=z0_test, z1_test=z1_test,
@@ -262,12 +285,15 @@ if __name__ == "__main__":
                         y_pred = nn_model(zt_test_aug)
                         nn_models.append(nn_model)
                     if reflow_iteration == args.reflow_iterations:
+                        logger.info(f"Given num_reflow_iterations = {args.reflow_iterations} "
+                                    f"and current reflow_iteration = {reflow_iteration}, "
+                                    f"no further reflows are needed, exiting the reflow loop")
                         break
                     # reflow part
                     # z0_train,z0_test (new reflow iteration)
                     inference_batch_size = 1024 * 4
                     logger.info(f"Reflow iteration # {reflow_iteration} : "
-                                f"Generating z0_train,z1_train for reflow_iteration # {reflow_iteration + 1}")
+                                f"Generating z0_train,z1_train for reflow iteration # {reflow_iteration + 1}")
                     z0_train, z1_train = RectifiedFlowsUtils.generate_reflow_data(n=z0_train.shape[0],
                                                                                   dim=z0_train.shape[1],
                                                                                   t_eval=t_eval,

@@ -151,7 +151,7 @@ if __name__ == "__main__":
         x1 = x1[:n_inference, :]
     else:
         logger.info(f"A valid n_inference is not passed, using all x0 samples, x0.shape = {x0.shape}")
-    if vt_artifact["trajectory_model"] == "global" and vt_artifact["reflows"] >= 1:
+    if vt_artifact["trajectory_model"] == "global":
         vt_nn_model = vt_artifact["models"][
             -1]  # get the latest model, I keep all reflow model just for possible debugging purposes
         assert isinstance(vt_nn_model, torch.nn.Module)
