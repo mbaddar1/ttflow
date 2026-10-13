@@ -25,3 +25,4 @@
 
 ## Possible contribution 
 * Instead of fighting non-linearity by forcing additional expensive global Reflow training cycles, TT-Flow accepts residual non-linearity and handles it locally inside small time windows $[t_k, t_{k+1}]$ using rank-adaptive tensor cores.
+* By framing your work around Entropy-Guided Residual Modeling, you are using a well-established ML paradigm to solve a real bottleneck in low-rank tensor compression.
