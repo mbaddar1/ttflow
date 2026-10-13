@@ -2,8 +2,6 @@ import os.path
 from typing import Iterable
 from datetime import datetime
 from loguru import logger
-from sklearn.model_selection import train_test_split
-
 from ttflow.data_generation.data_utils import DataUtils
 from ttflow.viz.viz import Visualizer
 
@@ -39,11 +37,13 @@ class DataSnapShotUtils:
         for split in data_splits_sizes.keys():
             logger.info(f"Generating split = {split}")
             n_split = data_splits_sizes[split]
-            x0, x1 = DataUtils.get_transport_data(x_dim=x_dim, y_dim=y_dim, dataset_name=dataset_name,
+            _, x1 = DataUtils.get_transport_data(x_dim=x_dim, y_dim=y_dim, dataset_name=dataset_name,
                                                   n=n_split, **kwargs)
-            data_snapshot_dict[split] = {"x0": x0, "x1": x1}
-            logger.debug(f"Finished generating split = {split} with x0.shape = {x0.shape}, x1.shape = {x1.shape}")
+            data_snapshot_dict[split] = {"x1": x1}
+            logger.debug(f"Finished generating split = {split} with x1.shape = {x1.shape}")
         logger.info(f"Finished generating samples for {dataset_name}")
+        # viz
+
         return data_snapshot_dict
 
 

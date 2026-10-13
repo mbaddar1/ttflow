@@ -8,7 +8,7 @@ https://drive.google.com/drive/folders/1wazn94CNAhzXrKliK0UjWIiPMzcw6O_U?usp=dri
 
 sample runs
 python data_snapshot_generator.py --dataset-name skewed_gaussian_2d --mean [0.0,0.0] --cov [[1.0,0.0],[0.0,1.0]] --shape [5.0,5.0]
-python data_snapshot_generator.py --dataset-name gaussian_mixture_2d --gaussian_mixtures_num_components 16
+python data_snapshot_generator.py --dataset-name gaussian_mixture_2d --gaussian-mixture-2d-num-components 4 --n-train 100_000 --n-test 20_000 --n-eval 20_000
 
 """
 import json
@@ -21,15 +21,16 @@ from datetime import datetime
 
 from ttflow.data_generation.datasnapshot_utils import DataSnapShotUtils
 from ttflow.utils import check_system_memory_and_swap
+from ttflow.viz.viz import Visualizer
 
 SEED = 42
 MIN_MEM_GB = 30
 MIN_SWAP_GB = 32
 TIMESTAMP = datetime.now().isoformat()
 DATASETS_SNAPSHOTS_DIR = "data-snapshots/experimental"
-
+DATASET_FIGURES_PATH = "figures/data_generation"
 parser = argparse.ArgumentParser()
-dataset_name_choices = ["manywell", "gaussian_mixture_2d", "skewed_gaussian_2d"]
+dataset_name_choices = ["manywell", "gaussian_mixture_2d", "skewed_gaussian_2d","circles"]
 # args names
 GAUSSIAN_MIXTURE_2D_NUM_COMPONENTS_PARAM_NAME = "gaussian_mixture_2d_num_components"
 # main args
@@ -122,7 +123,6 @@ if __name__ == "__main__":
                               f"_ncomp_{n_comp}"
                               f"_data_dim_{data_dim}"
                               f"_n_train_test_eval_{args.n_train}_{args.n_test}_{args.n_eval}.pkl")
-    # TODO add skewed Gaussian
     elif dataset_name == "skewed_gaussian_2d":
         dist_params = ["mean", "cov", "shape"]
         assert all(hasattr(args, dist_param) for dist_param in dist_params)
@@ -141,8 +141,24 @@ if __name__ == "__main__":
                               f"_n_train_{args.n_train}"
                               f"_n_test_{args.n_test}"
                               f"_n_eval_{args.n_eval}.pkl")
+    # 2d sklearn 2d distributions
+    elif dataset_name in ["circles"]:
+        x_dim = y_dim = 2
+        data_snapshot_dict = (DataSnapShotUtils.
+                              generate_transport_data_snapshot(dataset_name=dataset_name,
+                                                                                x_dim=x_dim, y_dim=y_dim,
+                                                                                n_train=args.n_train,
+                                                                                n_test=args.n_test, n_eval=args.n_eval))
+        Visualizer.plot_one_2d_distribution(x=data_snapshot_dict["train"]["x1"],
+                                            save_path=os.path.join(DATASET_FIGURES_PATH,f"{dataset_name}_{TIMESTAMP}.png"))
+        snapshot_file_name = (f"data_snapshot_{dataset_name}"
+                              f"_n_train_{args.n_train}"
+                              f"_n_test_{args.n_test}"
+                              f"_n_eval_{args.n_eval}.pkl")
+
     else:
         raise ValueError(f"dataset_name {dataset_name} not supported")
+
     logger.info(f"Saving snapshot file...")
     snapshot_filepath = os.path.join(DATASETS_SNAPSHOTS_DIR, snapshot_file_name)
     with open(snapshot_filepath, "wb") as f:

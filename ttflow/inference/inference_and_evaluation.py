@@ -1,7 +1,7 @@
 import argparse
 import os.path
 import pickle
-from typing import Tuple, Optional, Iterable
+from typing import Tuple, Optional, Iterable, List, Union
 from loguru import logger
 import torch.nn
 from torchdiffeq import odeint
@@ -16,25 +16,49 @@ INFERENCE_LOGS_DIR = "logs/inference"
 
 
 class InferenceHandler:
-    def __init__(self, x_shape: Tuple[int, int], model: torch.nn.Module):
-        self.x_shape = x_shape
-        self.model = model
+    INFERENCE_MODES = ["one-trajectory", "reflow", "piecewise"]
+
+    def __init__(self, models: Union[List[torch.nn.Module] | torch.nn.Module],
+                 inference_mode: str):
+        self.x_shape = None
+        if isinstance(models, torch.nn.Module):
+            self.model = models
+        elif isinstance(models, list) and all(isinstance(model, torch.nn.Module) for model in models):
+            self.models = models
+        else:
+            raise ValueError(f"Invalid models parameters")
+
+        self.inference_mode = inference_mode
+        assert inference_mode in InferenceHandler.INFERENCE_MODES, "Inference mode must be one of {}".format(
+            InferenceHandler.INFERENCE_MODES)
+        if inference_mode == "one-trajectory":
+            assert isinstance(models, torch.nn.Module)
+        else:
+            raise NotImplementedError(f"{self.inference_mode} not implemented yet!")
 
     @torch.no_grad()
     def infer(self, x0: torch.Tensor, t_eval: torch.Tensor,
               rtol: float = 1e-7,
               atol: float = 1e-9, method: Optional[str] = None) -> Iterable[torch.Tensor]:
         # TODO handle global and piecewise linear trajectory
-        x0_flat = x0.ravel()
-        traj = odeint(func=self.__fnn, y0=x0_flat, t=t_eval, method=method, rtol=rtol, atol=atol)
-        return traj
+        self.x_shape = x0.shape # FIXME a work around
+        if self.inference_mode == "one-trajectory":
+            x0_flat = x0.ravel()
+            traj = odeint(func=self.__fnn, y0=x0_flat, t=t_eval, method=method, rtol=rtol, atol=atol)
+            return traj
+        else:
+            raise NotImplementedError(f"{self.inference_mode} not implemented yet!")
 
     def __fnn(self, t: float, x: torch.Tensor) -> float:
-        x_reshaped = x.reshape(self.x_shape)
-        t_tensor = torch.ones(self.x_shape[0], 1).type(x.dtype).to(x.device) * t
-        x_aug = torch.cat([x_reshaped, t_tensor], dim=1)
-        output = self.model(x_aug)
-        return output.ravel()
+        assert self.x_shape is not None
+        if self.inference_mode == "one-trajectory":
+            x_reshaped = x.reshape(self.x_shape)
+            t_tensor = torch.ones(self.x_shape[0], 1).type(x.dtype).to(x.device) * t
+            x_aug = torch.cat([x_reshaped, t_tensor], dim=1)
+            output = self.model(x_aug)
+            return output.ravel()
+        else:
+            raise NotImplementedError(f"{self.inference_mode} not implemented yet!")
 
 
 def parse_args():
@@ -134,7 +158,7 @@ if __name__ == "__main__":
     inference_time_seconds = (end_time - start_time).total_seconds()
     logger.info(
         f"Inference x0->x1_hat | n_sample_infernce = {x0.shape[0]} | inference time = {inference_time_seconds} seconds")
-    x1_hat = list(traj)[-1].reshape(x1.shape)
+    x1_hat = list(traj)[-1].reshape(x0.shape)
 
     # sinkhorn loss
     sinkhorn_loss_fn = SamplesLoss(loss="sinkhorn", p=2, blur=0.1)
@@ -181,6 +205,11 @@ if __name__ == "__main__":
         Visualizer.plot_with_subplots_gaussian_mixture_2d(x0=x0, x1=x1, x1_hat=x1_hat,
                                                           title="Gaussian Mixture : Target vs. Inferred Samples ",
                                                           save_path=figure_path)
+    elif dataset_name in ["circles"]:
+        Visualizer.plot_subplots_three_distributions(x0=x0.detach().cpu(), x1=x1.detach().cpu(),
+                                                     x1_hat=x1_hat.detach().cpu(),
+                                                     save_path=os.path.join(INFERENCE_FIGURES_DIR,
+                                                                            f"{dataset_name}_{TIMESTAMP}.png"))
     else:
         raise NotImplementedError("dataset_name has not supported viz")
 
