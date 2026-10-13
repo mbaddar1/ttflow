@@ -196,7 +196,7 @@ if __name__ == "__main__":
                                              f"{args.trajectory_model}_"
                                              f"{RUN_TIMESTAMP}.log")
     logger.add(
-        "file_{time}.log",
+        log_file_path,
         rotation="10 MB",  # Rotate when file size reaches 10MB (or "1 day", "00:00", etc.)
         retention="10 days",  # Keep old log files for 10 days before deleting
         compression="zip",  # Compress rotated files into .zip
