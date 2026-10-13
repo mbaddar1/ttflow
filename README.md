@@ -22,3 +22,6 @@
 ### Phase 2: TT-Flow from Scratch
 * **Goal:** Train a standalone generative Flow Matching model from scratch using FTT velocity cores without a teacher model.
 * **Key Focus:** Optimal Transport (Sinkhorn) pairing to resolve trajectory crossings, combined with mini-batch DMRG/ALS optimization sweeps.
+
+## Possible contribution 
+* Instead of fighting non-linearity by forcing additional expensive global Reflow training cycles, TT-Flow accepts residual non-linearity and handles it locally inside small time windows $[t_k, t_{k+1}]$ using rank-adaptive tensor cores.
