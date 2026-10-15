@@ -15,6 +15,14 @@ TIME_STAMP = datetime.now().isoformat()
 
 class DataUtils:
     @staticmethod
+    def generate_gaussian_prior(dim:int,n_samples:int):
+        mu_prior = torch.zeros(dim)
+        cov_prior = torch.eye(dim)
+        x0 = (torch.distributions.MultivariateNormal(loc=mu_prior,
+                                                     covariance_matrix=cov_prior).
+              sample(sample_shape=torch.Size((n_samples,))))
+        return x0
+    @staticmethod
     def get_rectified_flow_get_l2_data(z0, z1, zt_mode:str):
         """
         This function is to get training input and output for the v(t) model
@@ -218,7 +226,7 @@ class DataUtils:
             # splits = dataset_name.split("_")
             # dataset_subname = splits[2]
         elif dataset_name == "circles":
-            x1, _ = make_circles(n_samples=n, shuffle=True, noise=noise, random_state=42)
+            x1, _ = make_circles(n_samples=n, shuffle=True, noise=noise, random_state=42,factor=0.3)
         elif dataset_name == "spiral":
             x1 = make_swiss_roll(n_samples=n, noise=noise)[0][:, [0, 2]]
         elif dataset_name == "moons":

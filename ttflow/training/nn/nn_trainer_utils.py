@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.model_selection import train_test_split
 from torch.nn import MSELoss
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
@@ -124,7 +123,8 @@ class NeuralNetworkTrainingUtils:
             )
 
         # after train
-        y_pred_test = model(x_test)
+        with torch.no_grad(): # a must to avoid cuda out of memory issues
+            y_pred_test = model(x_test)
         logger.info(f"MSELoss(test) after training:{MSELoss()(y_test, y_pred_test)}")
 
         assert len(learning_curve["train"]) == len(learning_curve["test"])

@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Optional, Union
+
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
@@ -6,6 +9,141 @@ from scipy.stats import gaussian_kde
 
 
 class Visualizer:
+    @staticmethod
+    def plot_subplots_three_distributions(
+            x0: torch.Tensor,
+            x1: torch.Tensor,
+            x1_hat: torch.Tensor,
+            max_points: int = 2000,
+            color: str = "#1f77b4",
+            titles: tuple[str, str, str] = (
+                    "Base ($x_0$)",
+                    "Target ($x_1$)",
+                    "Inferred ($\hat{x}_1$)",
+            ),
+            save_path: Optional[Union[str, Path]] = None,
+            dpi: int = 300,
+    ) -> tuple[plt.Figure, list[plt.Axes]]:
+        # Move tensors to CPU
+        tensors = [x0.detach().cpu(), x1.detach().cpu(), x1_hat.detach().cpu()]
+
+        # 1. Exact min and max bounds directly from x1 (no padding, no symmetric padding)
+        x1_cpu = tensors[1]
+        x_min, y_min = x1_cpu.min(dim=0).values.numpy()
+        x_max, y_max = x1_cpu.max(dim=0).values.numpy()
+
+        # 2. Render scatter subplots
+        fig, axes = plt.subplots(
+            1, 3, figsize=(12, 3.8), sharex=True, sharey=True, dpi=dpi
+        )
+
+        for ax, data_tensor, title in zip(axes, tensors, titles):
+            if len(data_tensor) > max_points:
+                indices = torch.randperm(len(data_tensor))[:max_points]
+                pts = data_tensor[indices].numpy()
+            else:
+                pts = data_tensor.numpy()
+
+            ax.scatter(
+                pts[:, 0], pts[:, 1], c=color, s=8, alpha=0.5, edgecolors="none"
+            )
+
+            ax.set_title(title, fontsize=12, pad=6)
+
+            # Explicitly clip to x1 bounds to force edge-to-edge rendering
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(y_min, y_max)
+
+            # Remove ticks, margins, and borders
+            ax.margins(0)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        # Reduce padding around and between subplots
+        plt.tight_layout(pad=0.5)
+
+        # 3. Save plot if path is provided
+        if save_path is not None:
+            path = Path(save_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(path, dpi=dpi, bbox_inches="tight", pad_inches=0.05)
+
+        return fig, list(axes)
+    @staticmethod
+    def plot_one_2d_distribution(
+            x: torch.Tensor,
+            bins: int = 128,
+            cmap: str = "magma",
+            show_points: bool = False,
+            title: str = "2D Density Distribution",
+            save_path: Optional[Union[str, Path]] = None,
+            dpi: int = 300,
+    ) -> tuple[plt.Figure, plt.Axes]:
+        """Plots a 2D density distribution directly from a PyTorch tensor.
+
+        Args:
+            x: Tensor of shape (N, 2)
+            bins: Resolution of the 2D grid/histogram
+            cmap: Matplotlib colormap name
+            show_points: Subsamples and overlays scatter points for context
+            title: Title of the plot
+            save_path: Optional file path to save the plot (e.g., 'plot.png',
+              'outputs/dist.pdf')
+            dpi: Resolution for saved raster images
+        """
+        if x.ndim != 2 or x.shape[1] != 2:
+            raise ValueError(
+                f"Expected tensor of shape (N, 2), but got {tuple(x.shape)}"
+            )
+
+        # 1. Efficient GPU/CPU 2D Histogram Computation
+        hist, edges = torch.histogramdd(x, bins=bins, density=True)
+
+        # Move processed grid to CPU NumPy arrays for Matplotlib
+        density = hist.cpu().numpy().T  # Transpose for matplotlib orientation
+        x_edges = edges[0].cpu().numpy()
+        y_edges = edges[1].cpu().numpy()
+
+        # 2. Render plot
+        plt.style.use("seaborn-v0_8-white")
+        fig, ax = plt.subplots(figsize=(8, 6), dpi=dpi)
+
+        # Fast 2D mesh rendering (rasterized keeps SVG/PDF file sizes small)
+        pcm = ax.pcolormesh(
+            x_edges, y_edges, density, cmap=cmap, shading="auto", rasterized=True
+        )
+
+        # Subsampled scatter overlay for point context
+        if show_points:
+            max_samples = 2000
+            if len(x) > max_samples:
+                indices = torch.randperm(len(x))[:max_samples]
+                pts = x[indices].detach().cpu().numpy()
+            else:
+                pts = x.detach().cpu().numpy()
+
+            ax.scatter(
+                pts[:, 0], pts[:, 1], color="white", s=4, alpha=0.2, edgecolor="none"
+            )
+
+        # 3. Aesthetics & Colorbar
+        cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
+        cbar.set_label("Density", fontsize=10)
+
+        ax.set_title(title, fontsize=14, fontweight="bold", pad=12)
+        ax.set_xlabel("Dimension 0", fontsize=11)
+        ax.set_ylabel("Dimension 1", fontsize=11)
+        ax.grid(True, linestyle="--", alpha=0.2, color="white")
+
+        plt.tight_layout()
+
+        # 4. Save to file if path is provided
+        if save_path is not None:
+            path = Path(save_path)
+            path.parent.mkdir(parents=True, exist_ok=True)  # Auto-create directory
+            fig.savefig(path, dpi=dpi, bbox_inches="tight")
+
+        return fig, ax
     @staticmethod
     def plot_with_subplots_gaussian_mixture_2d(
             x0: torch.Tensor,
