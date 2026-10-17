@@ -76,7 +76,7 @@ def parse_args():
                         help="opt for vt model", required=True)
     parser.add_argument("--trajectory-model", type=str, choices=TRAJECTORY_MODELING_CHOICES,
                         help="either modeling the global trajectory or on piecewise basis ", required=True)
-    parser.add_argument("--ode-solver-method", type=str, choices=["rk4","euler"],
+    parser.add_argument("--ode-solver-method", type=str, choices=["rk4","euler","dopri8"],
                         help="odesolve method", required=False)
     parser.add_argument("--rectification-linearity", type=str, choices=["linear", "nonlinear"],
                         default="linear", help="Is the rectification process linear or non-linear")
