@@ -23,23 +23,16 @@ Reference Impl for RecFlow
 https://colab.research.google.com/drive/1CyUP5xbA3pjH55HDWOA8vRgk2EEyEl_P?usp=sharing
 
 """
-
 import argparse
 import math
 import os
 import pickle
-from datetime import datetime
-from typing import Tuple, Iterable
-
 from tqdm import tqdm
 import numpy as np
 import torch
 from loguru import logger
-
 from ttflow.data_generation.data_utils import DataUtils
-from ttflow.inference.inference_and_evaluation import InferenceHandler
 from ttflow.training.nn.nn_models import VelocityFieldRegressionNet
-from ttflow.training.nn.nn_trainer_utils import NeuralNetworkTrainingUtils
 from ttflow.training.nn.rectified_flows_utils import RectifiedFlowsUtils
 from ttflow.training.nn.vt_trainer_utils import VTTrainerUtils
 from ttflow.utils import check_system_memory_and_swap, get_inmemory_size_mb
@@ -83,7 +76,7 @@ def parse_args():
                         help="opt for vt model", required=True)
     parser.add_argument("--trajectory-model", type=str, choices=TRAJECTORY_MODELING_CHOICES,
                         help="either modeling the global trajectory or on piecewise basis ", required=True)
-    parser.add_argument("--odesolve-method", type=str, choices=["rk4"],
+    parser.add_argument("--ode-solver-method", type=str, choices=["rk4","euler"],
                         help="odesolve method", required=False)
     parser.add_argument("--rectification-linearity", type=str, choices=["linear", "nonlinear"],
                         default="linear", help="Is the rectification process linear or non-linear")
@@ -158,13 +151,14 @@ if __name__ == "__main__":
 
     # pars args
     args = parse_args()
+    logger.info(f"args = {args}")
     # logging metadata , dependent on args
     # logging
     experiment_timestamp = datetime.now().isoformat()
 
     # set nn_epochs
     nn_epochs = 1 if args.dry_run else args.nn_epochs
-    logger.info(f"args = {args}")
+
     # device and dtype
     data_type = torch.float32
     assert data_type == torch.float32
@@ -301,7 +295,7 @@ if __name__ == "__main__":
                                                                                   data_type=data_type,
                                                                                   device=device,
                                                                                   inference_batch_size=inference_batch_size,
-                                                                                  ode_solve_method=args.odesolve_method)
+                                                                                  ode_solver_method=args.ode_solver_method)
                     # z0_test,z1_test (new reflow iteration)
                     logger.info(
                         f"Reflow iteration # {reflow_iteration + 1} : "
@@ -313,7 +307,7 @@ if __name__ == "__main__":
                                                                                 data_type=data_type,
                                                                                 device=device,
                                                                                 inference_batch_size=inference_batch_size,
-                                                                                ode_solve_method=args.odesolve_method)
+                                                                                ode_solver_method=args.ode_solver_method)
                 vt_artifact = {"models": nn_models, "reflows": args.reflow_iterations,
                                "hyperparams": {"hidden_dim": args.nn_hidden_dim, "depth": args.nn_depth,
                                                "lr": args.lr,

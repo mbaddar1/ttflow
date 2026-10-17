@@ -43,14 +43,14 @@ class InferenceHandler:
     @torch.no_grad()
     def infer(self, x0: torch.Tensor, t_eval: torch.Tensor,
               rtol: float = 1e-7,
-              atol: float = 1e-9, method: Optional[str] = None) -> Iterable[torch.Tensor]:
+              atol: float = 1e-9, ode_solver_method: Optional[str] = None) -> Iterable[torch.Tensor]:
         # TODO handle global and piecewise linear trajectory
         self.x_shape = x0.shape  # FIXME a work around
-        self.pbar = tqdm(total=t_eval[-1].item() - t_eval[0].item(), desc="Solving ODE")
+        self.pbar = tqdm(total=t_eval[-1].item() - t_eval[0].item(), desc=f"Solving ODE | Method = {ode_solver_method}")
         self.last_t = t_eval[0]
         if self.inference_mode == "one-trajectory":
             x0_flat = x0.ravel()
-            traj = odeint(func=self.__fnn, y0=x0_flat, t=t_eval, method=method, rtol=rtol, atol=atol)
+            traj = odeint(func=self.__fnn, y0=x0_flat, t=t_eval, method=ode_solver_method, rtol=rtol, atol=atol)
             return traj
         else:
             raise NotImplementedError(f"{self.inference_mode} not implemented yet!")
@@ -72,6 +72,98 @@ class InferenceHandler:
             return output.ravel()
         else:
             raise NotImplementedError(f"{self.inference_mode} not implemented yet!")
+
+
+class TransportEvaluator:
+    @staticmethod
+    def evaluate_sinkhorn_by_blur(
+            x,
+            y,
+            blurs=(0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0),
+            n_repeats=5,
+            sample_size=10_000,
+            scaling=0.99,
+            seed=42,
+    ):
+        if x.ndim != 2 or y.ndim != 2 or x.shape[1] != y.shape[1]:
+            raise ValueError("X and Y must have shape [N, D] with matching D.")
+        if not torch.isfinite(x).all() or not torch.isfinite(y).all():
+            raise ValueError("X and Y must contain only finite values.")
+        if not 2 <= sample_size <= min(len(x), len(y)):
+            raise ValueError("Invalid sample_size.")
+        if n_repeats < 2:
+            raise ValueError("n_repeats must be at least 2.")
+
+        # Estimate characteristic data scale from real samples.
+        x_scale = x[:min(len(x), 5000)]
+        with torch.no_grad():
+            distances = torch.cdist(x_scale, x_scale)
+            distances.fill_diagonal_(float("inf"))
+            typical_distance = distances.min(dim=1).values.median().item()
+
+        # Add data-scale-aware blur candidates.
+        blurs = sorted(set(blurs) | {
+            typical_distance * multiplier
+            for multiplier in (0.1, 0.25, 0.5, 1.0, 2.0)
+        })
+
+        generator = torch.Generator(device="cpu").manual_seed(seed)
+        results = {}
+
+        for blur in tqdm(blurs, desc="sinkhorn-blurs"):
+            values = {
+                "real_generated": [],
+                "real_real": [],
+                "generated_generated": [],
+            }
+
+            loss_fn = SamplesLoss(
+                loss="sinkhorn",
+                p=2,
+                blur=float(blur),
+                debias=True,
+                scaling=scaling,
+                backend="online",
+            )
+
+            for _ in tqdm(range(n_repeats), desc="sinkhorn-repeats"):
+                idx_x1 = torch.randperm(len(x), generator=generator)[:sample_size]
+                idx_x2 = torch.randperm(len(x), generator=generator)[:sample_size]
+                idx_y1 = torch.randperm(len(y), generator=generator)[:sample_size]
+                idx_y2 = torch.randperm(len(y), generator=generator)[:sample_size]
+
+                X1 = x[idx_x1.to(x.device)]
+                X2 = x[idx_x2.to(x.device)]
+                Y1 = y[idx_y1.to(y.device)]
+                Y2 = y[idx_y2.to(y.device)]
+
+                with torch.no_grad():
+                    rg = loss_fn(X1, Y1).item()
+                    rr = loss_fn(X1, X2).item()
+                    gg = loss_fn(Y1, Y2).item()
+
+                for name, value in (
+                        ("real_generated", rg),
+                        ("real_real", rr),
+                        ("generated_generated", gg),
+                ):
+                    if not torch.isfinite(torch.tensor(value)):
+                        raise RuntimeError(
+                            f"Non-finite {name} loss for blur={blur}"
+                        )
+                    values[name].append(value)
+
+            results[blur] = {
+                name: {
+                    "mean": float(torch.tensor(v, dtype=torch.float64).mean()),
+                    "stddev": float(
+                        torch.tensor(v, dtype=torch.float64).std(correction=1)
+                    ),
+                }
+                for name, v in values.items()
+            }
+
+        return results
 
 
 def parse_args():
@@ -98,9 +190,9 @@ def parse_args():
         required=False
     )
     parser.add_argument(
-        "--odesolve-method",
+        "--ode-solver-method",
         type=str,
-        choices=["rk4"],  # FIXME add more
+        choices=["rk4", "euler", "dopri8"],  # FIXME add more
         default="rk4",
         help="ODESOLVE method for inference",
         required=False
@@ -117,6 +209,8 @@ if __name__ == "__main__":
     # calculate sink-horn score
     args = parse_args()
     logger.info(f"Parsed args = {args}")
+    # set inference params
+
     # set filepaths
     vt_artifact_file_path = args.vt_artifact_file_path
     # load
@@ -136,10 +230,17 @@ if __name__ == "__main__":
     # assertions
     assert isinstance(data_snapshot, dict)
     assert isinstance(vt_artifact, dict)
-
     logger.info("Successfully loaded vt_artifact and the linked data snapshot")
+    # set inference hyperparams
+    traj_model = vt_artifact["trajectory_model"]
+    # mind the underscore in param name
+    has_ode_solver_method_param = hasattr(args, "ode_solver_method") and args.ode_solver_method is not None
+    if not has_ode_solver_method_param:
+        raise ValueError("Must have ode-solver-method-param")
+    ode_solver_method = args.ode_solver_method
+    logger.info(f"traj_model = {traj_model}, ode_method = {ode_solver_method}")
+    num_reflows = vt_artifact["reflows"]
     # do inference
-
     x1 = data_snapshot["eval"]["x1"]
     x0 = DataUtils.generate_gaussian_prior(n_samples=x1.shape[0], dim=x1.shape[1])
 
@@ -160,28 +261,22 @@ if __name__ == "__main__":
         model_dtype = param.dtype
         x0 = x0.to(dtype=model_dtype, device=model_device)
         x1 = x1.to(dtype=model_dtype, device=model_device)
-        odesolve_method = args.odesolve_method
         inference_handler = InferenceHandler(models=vt_nn_model, inference_mode="one-trajectory")
         t_eval = torch.linspace(start=0, end=1, steps=args.n_time_points).to(dtype=model_dtype, device=model_device)
         logger.info(
-            f"Starting inference x0->x1_hat over t_eval : x0.shape = {x0.shape} | len(t_eval) = {len(t_eval)} | odesolve_method = {odesolve_method}")
+            f"*** Starting inference x0->x1_hat over t_eval : x0.shape = {x0.shape} | "
+            f"len(t_eval) = {len(t_eval)} | "
+            f"odesolve_method = {args.ode_solver_method}***")
         start_time = datetime.now()
-        traj = inference_handler.infer(x0=x0, t_eval=t_eval, method=odesolve_method)
+        traj = inference_handler.infer(x0=x0, t_eval=t_eval, ode_solver_method=ode_solver_method)
         end_time = datetime.now()
         inference_time_seconds = (end_time - start_time).total_seconds()
     else:
         raise NotImplementedError("This inference case is not implemented")
-    logger.info(
-        f"Inference x0->x1_hat | n_sample_infernce = {x0.shape[0]} | inference time = {inference_time_seconds} seconds")
     x1_hat = list(traj)[-1].reshape(x0.shape)
-
     # sinkhorn loss
-    sinkhorn_loss_fn = SamplesLoss(loss="sinkhorn", p=2, blur=0.1)
-
-    logger.info(f"Sinkhorn distance (x1,x1)= {sinkhorn_loss_fn(x1, x1).item()}")
-    logger.info(f"Sinkhorn distance (x0,x0)= {sinkhorn_loss_fn(x0, x0).item()}")
-    logger.info(f"Sinkhorn distance (x0,x1)= {sinkhorn_loss_fn(x0, x1).item()}")
-
+    # https://www.kernel-operations.io/geomloss/_auto_examples/sinkhorn_multiscale/plot_transport_blur.html
+    sinkhorn_loss_fn = SamplesLoss(loss="sinkhorn", p=2, blur=0.01, debias=True, scaling=0.99)
     num_sinkhorn_iterations = 10
     sinkhorn_distance_values = []
 
@@ -189,28 +284,47 @@ if __name__ == "__main__":
     assert len(x1.shape) == 2
     for j in range(len(x1.shape)):
         assert x1.shape[j] == x1_hat.shape[j]
-    logger.info(f"x0.shape = {x0.shape} , {x1.shape} , {x1_hat.shape}")
-    n_subsample = x1.shape[0] // 4
-    logger.info(f"Bootstrap calculations for sinkhorn-distance over {num_sinkhorn_iterations} "
-                f"iterations, with n_subsample = {n_subsample} out of n_samples = {x1.shape[0]}")
-    # sinkhorn calculations
-    for iteration in tqdm(range(num_sinkhorn_iterations), desc="sinkhorn-calculations"):
-        i_idx = torch.randperm(x1.shape[0], device=x1.device)[:n_subsample]
-        sinkhorn_loss_value = sinkhorn_loss_fn(x1_hat[i_idx, :], x1[i_idx, :]).item()
-        logger.info(f"@Iteration # {(iteration + 1)}, sinkhorn_loss_value = {sinkhorn_loss_value}")
-        sinkhorn_distance_values.append(sinkhorn_loss_value)
+    logger.info("*** Starting the evaluation process ***")
+    eval_result = TransportEvaluator.evaluate_sinkhorn_by_blur(x=x1, y=x1_hat)
+    # n_subsample = x1.shape[0] // 4
+    # logger.info(f"Bootstrap calculations for sinkhorn-distance over {num_sinkhorn_iterations} "
+    #             f"iterations, with n_subsample = {n_subsample} out of n_samples = {x1.shape[0]}")
+    # # sinkhorn calculations
+    # for iteration in tqdm(range(num_sinkhorn_iterations), desc="sinkhorn-calculations"):
+    #     i_idx = torch.randperm(x1.shape[0], device=x1.device)[:n_subsample]
+    #     sinkhorn_loss_value = sinkhorn_loss_fn(x1_hat[i_idx, :], x1[i_idx, :]).item()
+    #     logger.info(f"@Iteration # {(iteration + 1)}, sinkhorn_loss_value = {sinkhorn_loss_value}")
+    #     sinkhorn_distance_values.append(sinkhorn_loss_value)
+
+    SEP_LINE_LEN = 50
+    HEADER_TEXT = "Sinkhorn Results Summary"
+
     logger.info(
-        "Sinkhorn(x1_hat, x1) summary | "
-        f"Iterations: {num_sinkhorn_iterations} | "
-        f"Inference samples: {x1.shape[0]} | "
-        f"Subsamples: {n_subsample} | "
-        f"Mean: {np.mean(sinkhorn_distance_values):.4f} | "
-        f"Std: {np.std(sinkhorn_distance_values):.4f} |"
-        f"Inference time for total number of inference samples: {inference_time_seconds} seconds"
+        f"\n{'=' * SEP_LINE_LEN}\n"
+        f"{HEADER_TEXT.center(SEP_LINE_LEN)}\n"
+        f"{'=' * SEP_LINE_LEN}\n"
+        f"  ODE Solver Method    : {ode_solver_method}\n"
+        f"  VT Trajectory Model  : {traj_model}\n"
+        f"  Num Reflows          : {num_reflows}\n"
+        f"  Sinkhorn Iterations  : {num_sinkhorn_iterations}\n"
+        f"  Inference Samples    : {x1.shape[0]:,}\n"
+        f"  Inference Time       : {inference_time_seconds:.2f}s\n"
+        f"  Evaluations (t)      : {len(t_eval)}\n"
+        f"  Eval Results         : {eval_result}\n"
+        f"{'=' * SEP_LINE_LEN}"
     )
 
     # TODO make dataset specific visualization
-    figure_path = os.path.join(INFERENCE_FIGURES_DIR, f"{dataset_name}_data_params_{data_params_flat}_{TIMESTAMP}.png")
+
+
+    filename = (f"inference_"
+                f"{dataset_name}_"
+                f"data_params_{data_params_flat}_"
+                f"timestamp_{TIMESTAMP}_"
+                f"trajectory_model_{traj_model}_"
+                f"ode_solver_method_{ode_solver_method}_"
+                f"num_reflows_{num_reflows}.png")
+    figure_path = os.path.join(INFERENCE_FIGURES_DIR, filename)
     if dataset_name == "skewed_gaussian_2d":
         # TODO add model arch and trajectory modeling approach (grid , continous/space-time)
         Visualizer.plot_with_subplots_gaussian_contour_2d(x0=x0, x1=x1, x1_hat=x1_hat,
