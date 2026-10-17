@@ -17,7 +17,7 @@ for speedup
 models/experimental/vt_dataset_gaussian_mixture_2d_data_params_num_components_4_trajectory_model_global_func_model_nn_model_hyperparams_hidden_dim_128_depth_2_opt_adam_nn_hidden_dim_128_timestamp_2026-10-13T23:48:45.910171.pkl
 ```
 
-### 2-Rectified-Flow / 1-Reflow
+### 2-Rectified-Flow / 1-Reflow (euler)
 
 ```text
 models/experimental/vt_dataset_gaussian_mixture_2d_data_params_num_components_4_trajectory_model_global_func_model_nn_model_hyperparams_hidden_dim_128_depth_2_opt_adam_nn_hidden_dim_128_timestamp_2026-10-14T00:26:57.171654.pkl
