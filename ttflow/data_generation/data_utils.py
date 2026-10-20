@@ -23,6 +23,14 @@ class DataUtils:
               sample(sample_shape=torch.Size((n_samples,))))
         return x0
     @staticmethod
+    def generate_uniform_prior(dim: int, n_samples: int, low: float = 0.0, high: float = 1.0):
+        low_tensor = torch.full((dim,), low)
+        high_tensor = torch.full((dim,), high)
+        x0 = torch.distributions.Uniform(low=low_tensor, high=high_tensor).sample(
+            sample_shape=torch.Size((n_samples,))
+        )
+        return x0
+    @staticmethod
     def get_rectified_flow_get_l2_data(z0, z1, zt_mode:str):
         """
         This function is to get training input and output for the v(t) model

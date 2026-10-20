@@ -73,6 +73,11 @@ class InferenceHandler:
         else:
             raise NotImplementedError(f"{self.inference_mode} not implemented yet!")
 
+    @staticmethod
+    def reshape_trajectory(trajectory: Iterable[torch.Tensor], tensor_shape: torch.Size):
+        trajectory_list = [tensor.reshape(tensor_shape) for tensor in trajectory]
+        return trajectory_list
+
 
 class TransportEvaluator:
     @staticmethod
@@ -218,6 +223,9 @@ if __name__ == "__main__":
     with open(vt_artifact_file_path, "rb") as f:
         vt_artifact = pickle.load(f)
     assert isinstance(vt_artifact, dict)
+    logger.info(f"loaded vt artifact(dict) : \n {vt_artifact}")
+    logger.info(f"vt_model = \n{vt_artifact["models"][0]}")
+    logger.info(f"num_reflows = {vt_artifact['reflows']}")
     data_snapshot_file_path = vt_artifact["data_snapshot_filepath"]
     logger.info("Loading data_snapshot from {}".format(data_snapshot_file_path))
     with open(data_snapshot_file_path, "rb") as f:
@@ -242,8 +250,12 @@ if __name__ == "__main__":
     num_reflows = vt_artifact["reflows"]
     # do inference
     x1 = data_snapshot["eval"]["x1"]
-    x0 = DataUtils.generate_gaussian_prior(n_samples=x1.shape[0], dim=x1.shape[1])
-
+    if vt_artifact["prior"] == "gaussian":
+        x0 = DataUtils.generate_gaussian_prior(n_samples=x1.shape[0], dim=x1.shape[1])
+    elif vt_artifact["prior"] == "uniform":
+        x0 = DataUtils.generate_uniform_prior(n_samples=x1.shape[0], dim=x1.shape[1])
+    else:
+        raise ValueError(f"Unknown prior : {vt_artifact['prior']}")
     logger.info(f"x0.shape = {x0.shape}, x1.shape = {x1.shape}")
     if hasattr(args, "n_inference") and isinstance(args.n_inference, int):
         logger.info(f"Passed args.n_inference = {args.n_inference}, using it...")
@@ -273,6 +285,12 @@ if __name__ == "__main__":
         inference_time_seconds = (end_time - start_time).total_seconds()
     else:
         raise NotImplementedError("This inference case is not implemented")
+    # Viz the trajectory (sample of it)
+    trajectory_plotting_sample_size = 1000
+    trajectory_reshaped = InferenceHandler.reshape_trajectory(trajectory=traj, tensor_shape=x0.shape)
+    sample_trajectory = Visualizer.sample_trajectory(trajectory=trajectory_reshaped,sample_size=trajectory_plotting_sample_size)
+    Visualizer.plot_trajectory_1d_vs_time(trajectory=sample_trajectory, t_evals=t_eval)
+    Visualizer.plot_trajectory_2d_space(trajectory=sample_trajectory)
     x1_hat = list(traj)[-1].reshape(x0.shape)
     # sinkhorn loss
     # https://www.kernel-operations.io/geomloss/_auto_examples/sinkhorn_multiscale/plot_transport_blur.html
@@ -315,7 +333,6 @@ if __name__ == "__main__":
     )
 
     # TODO make dataset specific visualization
-
 
     filename = (f"inference_"
                 f"{dataset_name}_"

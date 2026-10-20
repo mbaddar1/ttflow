@@ -1,6 +1,9 @@
+import logging
+import os
+import random
 from pathlib import Path
-from typing import Optional, Union
-
+from typing import Optional, Union, List
+from loguru import logger
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
@@ -69,6 +72,7 @@ class Visualizer:
             fig.savefig(path, dpi=dpi, bbox_inches="tight", pad_inches=0.05)
 
         return fig, list(axes)
+
     @staticmethod
     def plot_one_2d_distribution(
             x: torch.Tensor,
@@ -144,6 +148,7 @@ class Visualizer:
             fig.savefig(path, dpi=dpi, bbox_inches="tight")
 
         return fig, ax
+
     @staticmethod
     def plot_with_subplots_gaussian_mixture_2d(
             x0: torch.Tensor,
@@ -650,3 +655,185 @@ class Visualizer:
         )
         plt.show()
         plt.close(fig)
+
+    @staticmethod
+    def plot_trajectory_1d_vs_time(
+            trajectory: List[torch.Tensor],
+            t_evals: Union[List[float], torch.Tensor],
+            output_path: str = "rectified_flow_trajectories.png",
+    ) -> None:
+        """Plots and saves 1D trajectory curves x_t^{(0)} and x_t^{(1)} over time t.
+
+        Args:
+            trajectory: List of length T containing Tensors of shape (N, 2).
+            t_evals: List or Tensor of shape (T,) containing time evaluation points.
+            output_path: File path where the plot will be saved.
+        """
+        # Stack list into tensor of shape (T, N, 2)
+        assert len(trajectory) == len(t_evals)
+        traj_tensor = (
+            torch.stack(trajectory, dim=0)
+            if isinstance(trajectory, list)
+            else trajectory
+        )
+
+        T, N, num_dims = traj_tensor.shape
+        assert num_dims == 2, f"Expected 2D tensors (N, 2), but got {num_dims}D."
+
+        # Convert tensors to numpy arrays for matplotlib
+        traj_np = traj_tensor.detach().cpu().numpy()
+        if isinstance(t_evals, torch.Tensor):
+            t_evals = t_evals.detach().cpu().numpy()
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
+        dim_titles = ["Dimension 0 ($j=0$)", "Dimension 1 ($j=1$)"]
+
+        colors = plt.cm.viridis([i / max(1, N - 1) for i in range(N)])
+
+        for j in range(2):
+            ax = axes[j]
+            for idx in range(N):
+                x_j = traj_np[:, idx, j]
+                color = colors[idx]
+
+                # Trajectory line across t
+                ax.plot(t_evals, x_j, color=color, alpha=0.6, linewidth=1.2)
+
+                # Leftmost x0(j) at t=0 and Rightmost x1(j) at t=1
+                ax.scatter(t_evals[0], x_j[0], color=color, s=20, zorder=3)
+                ax.scatter(t_evals[-1], x_j[-1], color=color, s=20, zorder=3)
+
+            ax.set_title(dim_titles[j], fontsize=12)
+            ax.set_xlabel("Time ($t$)", fontsize=10)
+            ax.set_ylabel(f"$x_t^{{({j})}}$", fontsize=10)
+            ax.grid(True, linestyle="--", alpha=0.5)
+
+        plt.suptitle(
+            f"Rectified Flow Trajectories ($N={N}$ Samples)", fontsize=13, y=1.01
+        )
+        plt.tight_layout()
+
+        dir_name = os.path.dirname(output_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
+
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        logger.info(f"Saved trajectory plot to: {output_path}")
+
+    @staticmethod
+    def sample_trajectory(
+            trajectory: List[torch.Tensor],
+            sample_size: int = 30,
+            seed: Union[int, None] = None,
+    ) -> List[torch.Tensor]:
+        """Randomly samples a subset of indices across all z_t in a trajectory list.
+
+        Args:
+            trajectory: List of length T where each element z_t is a Tensor of shape
+              (N, D).
+            sample_size: Number of samples to draw from N (default 30).
+            seed: Optional random seed for reproducible sampling.
+
+        Returns:
+            List of length T where each sliced z_t is of shape (sample_size, D).
+        """
+        assert len(trajectory) > 0, "Trajectory list is empty."
+
+        N = trajectory[0].shape[0]
+        assert sample_size <= N, (
+            f"Requested sample_size ({sample_size}) exceeds total samples N ({N})."
+        )
+
+        if seed is not None:
+            torch.manual_seed(seed)
+            random.seed(seed)
+
+        # Generate random indices along the batch dimension
+        indices = torch.randperm(N)[:sample_size]
+
+        # Slice each z_t along dimension 0
+        sampled_trajectory = [
+            zt[indices] if isinstance(zt, torch.Tensor) else zt[indices.numpy()]
+            for zt in trajectory
+        ]
+
+        return sampled_trajectory
+
+    @staticmethod
+    def plot_trajectory_2d_space(
+            trajectory: List[torch.Tensor],
+            output_path: str = "rectified_flow_2d_space.png",
+    ) -> None:
+        """Plots 2D spatial paths of trajectories from z0 to z1.
+
+        Args:
+            trajectory: List of length T containing Tensors of shape (N, 2).
+            output_path: File path where the plot will be saved.
+        """
+        # Stack list into tensor of shape (T, N, 2)
+        traj_tensor = (
+            torch.stack(trajectory, dim=0)
+            if isinstance(trajectory, list)
+            else trajectory
+        )
+
+        T, N, num_dims = traj_tensor.shape
+        assert num_dims == 2, f"Expected 2D tensors (N, 2), but got {num_dims}D."
+
+        traj_np = traj_tensor.detach().cpu().numpy()
+
+        fig, ax = plt.subplots(figsize=(8, 8))
+        colors = plt.cm.viridis([i / max(1, N - 1) for i in range(N)])
+
+        for idx in range(N):
+            x_coords = traj_np[:, idx, 0]  # Dimension 0
+            y_coords = traj_np[:, idx, 1]  # Dimension 1
+            color = colors[idx]
+
+            # Plot 2D spatial trajectory curve
+            ax.plot(x_coords, y_coords, color=color, alpha=0.6, linewidth=1.2)
+
+            # Mark Start point z0 (t=0)
+            ax.scatter(
+                x_coords[0],
+                y_coords[0],
+                color=color,
+                marker="o",
+                s=30,
+                zorder=4,
+                edgecolors="k",
+                linewidth=0.5,
+                label="Start ($z_0$)" if idx == 0 else "",
+            )
+
+            # Mark End point z1 (t=1)
+            ax.scatter(
+                x_coords[-1],
+                y_coords[-1],
+                color=color,
+                marker="X",
+                s=40,
+                zorder=4,
+                edgecolors="k",
+                linewidth=0.5,
+                label="End ($z_1$)" if idx == 0 else "",
+            )
+
+        ax.set_title(f"2D Rectified Flow Spatial Trajectories ($N={N}$)", fontsize=13)
+        ax.set_xlabel("Dimension 0 ($z^{(0)}$)", fontsize=11)
+        ax.set_ylabel("Dimension 1 ($z^{(1)}$)", fontsize=11)
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.legend(loc="best")
+        ax.set_aspect("equal", adjustable="datalim")
+
+        plt.tight_layout()
+
+        # Save output
+        dir_name = os.path.dirname(output_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
+
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        logger.info(f"Saved 2D spatial trajectory plot to: {output_path}")

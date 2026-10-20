@@ -76,7 +76,7 @@ def parse_args():
                         help="opt for vt model", required=True)
     parser.add_argument("--trajectory-model", type=str, choices=TRAJECTORY_MODELING_CHOICES,
                         help="either modeling the global trajectory or on piecewise basis ", required=True)
-    parser.add_argument("--ode-solver-method", type=str, choices=["rk4","euler","dopri8"],
+    parser.add_argument("--ode-solver-method", type=str, choices=["rk4", "euler", "dopri8"],
                         help="odesolve method", required=False)
     parser.add_argument("--rectification-linearity", type=str, choices=["linear", "nonlinear"],
                         default="linear", help="Is the rectification process linear or non-linear")
@@ -141,6 +141,13 @@ def parse_args():
         action="store_true",  # defaults to False; becomes True when the flag is passed
         help="Show what would happen without making changes",
     )
+    # prior
+    parser.add_argument(
+        "--prior",
+        type=str,  # defaults to False; becomes True when the flag is passed
+        choices=["gaussian", "uniform"],
+        help="prior dist",
+    )
     # dirs
     parser.add_argument("--logs-dir", type=str, help="Path to the logs directory", default="logs")
     parser.add_argument("--output-model-dir", default="models/experimental", required=False)
@@ -152,12 +159,20 @@ if __name__ == "__main__":
     # pars args
     args = parse_args()
     logger.info(f"args = {args}")
+    # logger file
+    log_file_path = os.path.join(LOGGER_DIR, f"vt_trainer_"
+                                             f"{args.vt_model}_"
+                                             f"{args.vt_opt}_"
+                                             f"{args.trajectory_model}_"
+                                             f"{RUN_TIMESTAMP}.log")
     # logging metadata , dependent on args
     # logging
     experiment_timestamp = datetime.now().isoformat()
 
     # set nn_epochs
     nn_epochs = 1 if args.dry_run else args.nn_epochs
+    # prior
+    prior = args.prior
 
     # device and dtype
     data_type = torch.float32
@@ -184,11 +199,7 @@ if __name__ == "__main__":
     # data metadata
     dataset_name = data_snapshot["dataset_name"]
     # log path
-    log_file_path = os.path.join(LOGGER_DIR, f"vt_trainer_"
-                                             f"{args.vt_model}_"
-                                             f"{args.vt_opt}_"
-                                             f"{args.trajectory_model}_"
-                                             f"{RUN_TIMESTAMP}.log")
+
     logger.add(
         log_file_path,
         rotation="10 MB",  # Rotate when file size reaches 10MB (or "1 day", "00:00", etc.)
@@ -206,6 +217,17 @@ if __name__ == "__main__":
     # load x0,x1 for train/test splits (no eval , yet)
     z1_train = data_snapshot["train"]["x1"].to(dtype=data_type, device=device)
     z1_test = data_snapshot["test"]["x1"].to(dtype=data_type, device=device)
+    # generate prior
+    if args.prior == "gaussian":
+        z0_train = DataUtils.generate_gaussian_prior(dim=z1_train.shape[1], n_samples=z1_train.shape[0])
+        z0_test = DataUtils.generate_gaussian_prior(dim=z1_test.shape[1], n_samples=z1_test.shape[0])
+    elif args.prior == "uniform":
+        z0_train = DataUtils.generate_uniform_prior(dim=z1_train.shape[1], n_samples=z1_train.shape[0])
+        z0_test = DataUtils.generate_uniform_prior(dim=z1_test.shape[1], n_samples=z1_test.shape[0])
+    else:
+        raise ValueError(f"Unknown prior {args.prior}")
+    z0_train = z0_train.to(dtype=data_type, device=device)
+    z0_test = z0_test.to(dtype=data_type, device=device)
     # (dynamically) determine epochs - fixing the number of param updates and determine nn_epochs based on it
     n_train = z1_train.shape[0]
     num_batches_per_epoch = math.ceil(float(n_train) / args.batch_size)
@@ -215,13 +237,6 @@ if __name__ == "__main__":
         if args.vt_model == "nn":
             # create RegNet
             if args.vt_opt == "adam":
-
-                z0_train = DataUtils.generate_gaussian_prior(dim=z1_train.shape[1],
-                                                             n_samples=z1_train.shape[0]).to(dtype=data_type,
-                                                                                             device=device)
-                z0_test = DataUtils.generate_gaussian_prior(dim=z1_test.shape[1],
-                                                            n_samples=z1_test.shape[0]).to(dtype=data_type,
-                                                                                           device=device)
 
                 nn_models = []  # TODO - for tracking only, always use the last model in global reflow
                 learning_curves = []  # for each reflowed model
@@ -239,7 +254,7 @@ if __name__ == "__main__":
                     nn_model.parameters(), lr=args.lr, weight_decay=args.nn_reg_lambda
                 )
                 logger.info(
-                    "***********************************************************"
+                    "***********************************************************\n"
                     "Training Model Specs:\n"
                     f"  [Model Architecture]\n"
                     f"    - model =                   {nn_model}\n"
@@ -259,7 +274,7 @@ if __name__ == "__main__":
                     f"    - Patience:                 {args.patience}\n"
                     f"    - Min Rel Loss Delta:       {args.min_rel_loss_delta}\n"
                     f"    - ZT Mode:                  {args.rectification_linearity}\n"
-                    f"    - Reflow Iterations:  {args.reflow_iterations}"
+                    f"    - Reflow Iterations:        {args.reflow_iterations}\n"
                     "**********************************************************"
                 )
                 for reflow_iteration in tqdm(range(args.reflow_iterations + 1), desc="reflow iterations"):
@@ -308,7 +323,7 @@ if __name__ == "__main__":
                                                                                 device=device,
                                                                                 inference_batch_size=inference_batch_size,
                                                                                 ode_solver_method=args.ode_solver_method)
-                vt_artifact = {"models": nn_models, "reflows": args.reflow_iterations,
+                vt_artifact = {"models": nn_models, "reflows": args.reflow_iterations, "prior": prior,
                                "hyperparams": {"hidden_dim": args.nn_hidden_dim, "depth": args.nn_depth,
                                                "lr": args.lr,
                                                "batch_size": args.batch_size, "epochs": args.nn_epochs},
