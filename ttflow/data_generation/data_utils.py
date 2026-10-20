@@ -258,8 +258,8 @@ class DataUtils:
             _, x1 = DataUtils.get_gaussian_mixture(
                 n=n,
                 num_components=num_components,
-                radius=10.0,
-                variance=0.3,
+                radius=kwargs["radius"],
+                variance=kwargs["variance"],
                 rotation=torch.pi / 3
             )
         elif dataset_name == "skewed_gaussian_2d":
