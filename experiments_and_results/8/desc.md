@@ -235,5 +235,6 @@ Solving ODE | Method = dopri8: 100%|██████████| 1.0027452707
 experiments_and_results/8/8_2/inference_gaussian_mixture_2d_data_params_num_components_16_timestamp_2026-10-20T15:35:58.336409_trajectory_model_global_ode_solver_method_dopri8_num_reflows_0.png
 ```
 # Observations and Takeaways 
-Uniform prior is bad visually - Gaussian is the way to go
-support : 
+- Uniform prior is bad visually - Gaussian is the way to go
+support
+- wider shallower networks are better : hidden_dim = 1024 and depth = 2 are the best for visuals
