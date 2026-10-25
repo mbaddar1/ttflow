@@ -43,14 +43,36 @@ The project follows two complementary directions: distilling existing flow traje
 These are research hypotheses to validate experimentally, not assumed results.
 
 ---
+# Experiments
+## Settings 
+Quoted from the Rectified flow paper , p23 the `experimental settings section`
+* Using $\pi_0$ as Gaussian
+* We use MLP and U-Net (with possible adaption to tabular data ??)
+* Solvers : euler, rk4 and dopri8
+## Preliminary Results 
+* Experiments dump can be found in this subdir `experiments_and_results`
+* This file `experiments_journal.md` tracks important experiments, results and some observations
+
+___
+## Key takeaways and observations 
+* 
+
 
 ## References
 
 1. **Local Flow Matching Generative Models.**  
    https://arxiv.org/abs/2410.02548
-
 2. **PeRFlow: Piecewise Rectified Flow as Universal Plug-and-Play Accelerator.**  
    https://arxiv.org/abs/2405.07510
-
 3. **Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow.**  
    https://arxiv.org/abs/2209.03003
+4. **On the Convergence and Straightness of Rectified Flow**
+    https://arxiv.org/pdf/2410.14949
+5. **Simple ReFlow: Improved Techniques for Fast Flow Models** (ICLR 2025).  
+   https://proceedings.iclr.cc/paper_files/paper/2025/hash/a95ba79ea3881ffd9fb8620e1a0d4b36-Abstract-Conference.html
+6. **Analyzing and Mitigating Model Collapse in Rectified Flow Models** (2024).  
+   https://arxiv.org/abs/2412.08175
+7. **Improving the Training of Rectified Flows** (NeurIPS 2024).  
+   https://proceedings.neurips.cc/paper_files/paper/2024/hash/7343a5c976f8399880b695267f1f9e9f-Abstract-Conference.html
+8. **ProReflow: Progressive Reflow with Decomposed Velocity** (CVPR 2025).  
+   https://openaccess.thecvf.com/content/CVPR2025/html/Ke_ProReflow_Progressive_Reflow_with_Decomposed_Velocity_CVPR_2025_paper.html
