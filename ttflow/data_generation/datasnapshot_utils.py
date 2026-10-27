@@ -42,8 +42,7 @@ class DataSnapShotUtils:
                                                  n=n_split, **kwargs)
             data_snapshot_dict[split] = {"x1": x1}
             logger.debug(f"Finished generating split = {split} with x1.shape = {x1.shape}")
-        Visualizer.plot_one_2d_distribution(x=data_snapshot_dict["train"]["x1"],
-                                            save_path=os.path.join(DATA_GENERATION_FIGURES_DIR, f"{dataset_name}.png"))
+
         logger.info(f"Finished generating samples for {dataset_name}")
         # viz
 

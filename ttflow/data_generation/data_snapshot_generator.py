@@ -131,6 +131,10 @@ if __name__ == "__main__":
                               f"_variance_{args.gm_2d_variance}"
                               f"_data_dim_{data_dim}"
                               f"_n_train_test_eval_{args.n_train}_{args.n_test}_{args.n_eval}.pkl")
+        logger.info("Plotting gaussian mixture 2d...")
+        Visualizer.plot_one_distribution_2d_gaussian(x=data_snapshot_dict["train"]["x1"],
+                                                     title="Gaussian mixture distribution",
+                                                     save_path=os.path.join(DATASET_FIGURES_PATH, f"gaussian_mixture_2d_{TIMESTAMP}.png"))
     elif dataset_name == "skewed_gaussian_2d":
         dist_params = ["mean", "cov", "shape"]
         assert all(hasattr(args, dist_param) for dist_param in dist_params)
@@ -158,8 +162,8 @@ if __name__ == "__main__":
                                                                                 x_dim=x_dim, y_dim=y_dim,
                                                                                 n_train=args.n_train,
                                                                                 n_test=args.n_test, n_eval=args.n_eval))
-        Visualizer.plot_one_2d_distribution(x=data_snapshot_dict["train"]["x1"],
-                                            save_path=os.path.join(DATASET_FIGURES_PATH,f"{dataset_name}_{TIMESTAMP}.png"))
+        Visualizer.plot_one_2d_distribution_scatter(x=data_snapshot_dict["train"]["x1"],
+                                                    save_path=os.path.join(DATASET_FIGURES_PATH,f"{dataset_name}_{TIMESTAMP}.png"))
         snapshot_file_name = (f"data_snapshot_{dataset_name}"
                               f"_n_train_{args.n_train}"
                               f"_n_test_{args.n_test}"
