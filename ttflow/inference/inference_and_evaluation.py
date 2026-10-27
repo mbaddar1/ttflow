@@ -2,6 +2,8 @@ import argparse
 import os.path
 import pickle
 from typing import Tuple, Optional, Iterable, List, Union
+
+import sys
 from loguru import logger
 import torch.nn
 from torchdiffeq import odeint
@@ -73,6 +75,11 @@ class InferenceHandler:
         else:
             raise NotImplementedError(f"{self.inference_mode} not implemented yet!")
 
+    @staticmethod
+    def reshape_trajectory(trajectory: Iterable[torch.Tensor], tensor_shape: torch.Size):
+        trajectory_list = [tensor.reshape(tensor_shape) for tensor in trajectory]
+        return trajectory_list
+
 
 class TransportEvaluator:
     @staticmethod
@@ -106,7 +113,7 @@ class TransportEvaluator:
             typical_distance * multiplier
             for multiplier in (0.1, 0.25, 0.5, 1.0, 2.0)
         })
-
+        blurs = [b for b in blurs if b > 1e-4]  # filter small values for numerical stability
         generator = torch.Generator(device="cpu").manual_seed(seed)
         results = {}
 
@@ -218,6 +225,9 @@ if __name__ == "__main__":
     with open(vt_artifact_file_path, "rb") as f:
         vt_artifact = pickle.load(f)
     assert isinstance(vt_artifact, dict)
+    logger.info(f"loaded vt artifact(dict) : \n {vt_artifact}")
+    logger.info(f"vt_model = \n{vt_artifact["models"][0]}")
+    logger.info(f"num_reflows = {vt_artifact['reflows']}")
     data_snapshot_file_path = vt_artifact["data_snapshot_filepath"]
     logger.info("Loading data_snapshot from {}".format(data_snapshot_file_path))
     with open(data_snapshot_file_path, "rb") as f:
@@ -242,8 +252,12 @@ if __name__ == "__main__":
     num_reflows = vt_artifact["reflows"]
     # do inference
     x1 = data_snapshot["eval"]["x1"]
-    x0 = DataUtils.generate_gaussian_prior(n_samples=x1.shape[0], dim=x1.shape[1])
-
+    if vt_artifact["prior"] == "gaussian":
+        x0 = DataUtils.generate_gaussian_prior(n_samples=x1.shape[0], dim=x1.shape[1])
+    elif vt_artifact["prior"] == "uniform":
+        x0 = DataUtils.generate_uniform_prior(n_samples=x1.shape[0], dim=x1.shape[1])
+    else:
+        raise ValueError(f"Unknown prior : {vt_artifact['prior']}")
     logger.info(f"x0.shape = {x0.shape}, x1.shape = {x1.shape}")
     if hasattr(args, "n_inference") and isinstance(args.n_inference, int):
         logger.info(f"Passed args.n_inference = {args.n_inference}, using it...")
@@ -273,29 +287,19 @@ if __name__ == "__main__":
         inference_time_seconds = (end_time - start_time).total_seconds()
     else:
         raise NotImplementedError("This inference case is not implemented")
+    # Viz the trajectory (sample of it)
+    trajectory_plotting_sample_size = 100
+    trajectory_reshaped = InferenceHandler.reshape_trajectory(trajectory=traj, tensor_shape=x0.shape)
+    sample_trajectory = Visualizer.sample_trajectory(trajectory=trajectory_reshaped,
+                                                     sample_size=trajectory_plotting_sample_size)
+    Visualizer.plot_trajectory_1d_vs_time(trajectory=sample_trajectory, t_evals=t_eval)
+    Visualizer.plot_trajectory_2d_space(trajectory=sample_trajectory)
     x1_hat = list(traj)[-1].reshape(x0.shape)
-    # sinkhorn loss
-    # https://www.kernel-operations.io/geomloss/_auto_examples/sinkhorn_multiscale/plot_transport_blur.html
-    sinkhorn_loss_fn = SamplesLoss(loss="sinkhorn", p=2, blur=0.01, debias=True, scaling=0.99)
-    num_sinkhorn_iterations = 10
-    sinkhorn_distance_values = []
 
-    assert len(x1_hat.shape) == len(x1.shape)
-    assert len(x1.shape) == 2
     for j in range(len(x1.shape)):
         assert x1.shape[j] == x1_hat.shape[j]
     logger.info("*** Starting the evaluation process ***")
     eval_result = TransportEvaluator.evaluate_sinkhorn_by_blur(x=x1, y=x1_hat)
-    # n_subsample = x1.shape[0] // 4
-    # logger.info(f"Bootstrap calculations for sinkhorn-distance over {num_sinkhorn_iterations} "
-    #             f"iterations, with n_subsample = {n_subsample} out of n_samples = {x1.shape[0]}")
-    # # sinkhorn calculations
-    # for iteration in tqdm(range(num_sinkhorn_iterations), desc="sinkhorn-calculations"):
-    #     i_idx = torch.randperm(x1.shape[0], device=x1.device)[:n_subsample]
-    #     sinkhorn_loss_value = sinkhorn_loss_fn(x1_hat[i_idx, :], x1[i_idx, :]).item()
-    #     logger.info(f"@Iteration # {(iteration + 1)}, sinkhorn_loss_value = {sinkhorn_loss_value}")
-    #     sinkhorn_distance_values.append(sinkhorn_loss_value)
-
     SEP_LINE_LEN = 50
     HEADER_TEXT = "Sinkhorn Results Summary"
 
@@ -306,7 +310,6 @@ if __name__ == "__main__":
         f"  ODE Solver Method    : {ode_solver_method}\n"
         f"  VT Trajectory Model  : {traj_model}\n"
         f"  Num Reflows          : {num_reflows}\n"
-        f"  Sinkhorn Iterations  : {num_sinkhorn_iterations}\n"
         f"  Inference Samples    : {x1.shape[0]:,}\n"
         f"  Inference Time       : {inference_time_seconds:.2f}s\n"
         f"  Evaluations (t)      : {len(t_eval)}\n"
@@ -316,7 +319,6 @@ if __name__ == "__main__":
 
     # TODO make dataset specific visualization
 
-
     filename = (f"inference_"
                 f"{dataset_name}_"
                 f"data_params_{data_params_flat}_"
@@ -325,21 +327,23 @@ if __name__ == "__main__":
                 f"ode_solver_method_{ode_solver_method}_"
                 f"num_reflows_{num_reflows}.png")
     figure_path = os.path.join(INFERENCE_FIGURES_DIR, filename)
-    if dataset_name == "skewed_gaussian_2d":
-        # TODO add model arch and trajectory modeling approach (grid , continous/space-time)
-        Visualizer.plot_with_subplots_gaussian_contour_2d(x0=x0, x1=x1, x1_hat=x1_hat,
-                                                          title="Skewed Gaussian Distribution: Target vs. Inferred Samples",
-                                                          save_path=figure_path)
-    elif dataset_name == "gaussian_mixture_2d":
-        Visualizer.plot_with_subplots_gaussian_mixture_2d(x0=x0, x1=x1, x1_hat=x1_hat,
-                                                          title="Gaussian Mixture : Target vs. Inferred Samples ",
-                                                          save_path=figure_path)
+    logger.info("Staring visualization...")
+    titles_dict = {"skewed_gaussian_2d": "Skewed Gaussian 2D", "gaussian_mixture_2d": "Gaussian Mixture 2D"}
+    if dataset_name in ["skewed_gaussian_2d", "gaussian_mixture_2d"]:
+        # Gaussian like plots
+        title = titles_dict[dataset_name]
+        logger.info(f"Visualizing {dataset_name}")
+        Visualizer.plot_three_gaussian_like_distributions_2d_gaussian(x0=x0, x1=x1, x1_hat=x1_hat,
+                                                                      title=title,
+                                                                      save_path=figure_path)
+
     elif dataset_name in ["circles"]:
+        # scatter-like plots # TODO fix or modify
         Visualizer.plot_subplots_three_distributions(x0=x0.detach().cpu(), x1=x1.detach().cpu(),
                                                      x1_hat=x1_hat.detach().cpu(),
                                                      save_path=os.path.join(INFERENCE_FIGURES_DIR,
                                                                             f"{dataset_name}_{TIMESTAMP}.png"))
     else:
         raise NotImplementedError("dataset_name has not supported viz")
-
+    logger.info("Inference figure saved in: {}".format(figure_path))
     logger.info(f"Inference and evaluation process finished successfully!")

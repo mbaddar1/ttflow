@@ -11,7 +11,8 @@ DATA_GENERATION_FIGURES_DIR = "figures/data_generation"
 
 class DataSnapShotUtils:
     @staticmethod
-    def generate_transport_data_snapshot(dataset_name: str, x_dim: int, y_dim: int, n_train: int, n_test: int, n_eval: int, **kwargs) -> dict:
+    def generate_transport_data_snapshot(dataset_name: str, x_dim: int, y_dim: int, n_train: int, n_test: int,
+                                         n_eval: int, **kwargs) -> dict:
         """
         :param n_test:
         :type n_test:
@@ -38,14 +39,14 @@ class DataSnapShotUtils:
             logger.info(f"Generating split = {split}")
             n_split = data_splits_sizes[split]
             _, x1 = DataUtils.get_transport_data(x_dim=x_dim, y_dim=y_dim, dataset_name=dataset_name,
-                                                  n=n_split, **kwargs)
+                                                 n=n_split, **kwargs)
             data_snapshot_dict[split] = {"x1": x1}
             logger.debug(f"Finished generating split = {split} with x1.shape = {x1.shape}")
+
         logger.info(f"Finished generating samples for {dataset_name}")
         # viz
 
         return data_snapshot_dict
-
 
     @staticmethod
     def generate_manywell_snapshot(total_data_dim: int, manywell_dim: int, n_train_test: int, n_eval: int,

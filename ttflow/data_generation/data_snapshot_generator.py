@@ -32,7 +32,7 @@ DATASET_FIGURES_PATH = "figures/data_generation"
 parser = argparse.ArgumentParser()
 dataset_name_choices = ["manywell", "gaussian_mixture_2d", "skewed_gaussian_2d","circles"]
 # args names
-GAUSSIAN_MIXTURE_2D_NUM_COMPONENTS_PARAM_NAME = "gaussian_mixture_2d_num_components"
+
 # main args
 parser.add_argument("--n-train", type=int, default=500_000,
                     help="Number of training samples (keep large, may subsample later)", required=False)
@@ -52,8 +52,13 @@ parser.add_argument("--manywell-data-dim", type=int, default=4,
 parser.add_argument("--manywell-dim", type=int, default=4,
                     help="Dimensionality of the ManyWell target", required=False)
 # for gaussian mixture
-parser.add_argument(f"--{GAUSSIAN_MIXTURE_2D_NUM_COMPONENTS_PARAM_NAME.replace("_", "-")}", type=int, default=3,
+parser.add_argument("--gm-2d-num-components", type=int, default=3,
                     required=False)
+parser.add_argument("--gm-2d-radius", type=float, default=10.0,
+                    required=False)
+parser.add_argument("--gm-2d-variance", type=float, default=0.3,
+                    required=False)
+
 # for multivariate skewed gaussian (2D)
 # sample run
 # data_snapshot_generator.py --dataset-name skewed_gaussian_2d --mean [0.0,0.0] --cov [[1.0,0.0],[0.0,1.0]] --shape [5.0,5.0]
@@ -110,19 +115,26 @@ if __name__ == "__main__":
 
     elif dataset_name == "gaussian_mixture_2d":
         data_dim = 2
-        has_arg = hasattr(args, GAUSSIAN_MIXTURE_2D_NUM_COMPONENTS_PARAM_NAME)
-        passed_arg = args.__getattribute__(GAUSSIAN_MIXTURE_2D_NUM_COMPONENTS_PARAM_NAME)
-        n_comp = passed_arg if has_arg and passed_arg else 3
+        has_arg = hasattr(args, "gm_2d_num_components") and hasattr(args,"gm_2d_radius") and hasattr(args,"gm_2d_variance")
+        n_comp = args.gm_2d_num_components
         data_snapshot_dict = (DataSnapShotUtils.
                               generate_transport_data_snapshot(dataset_name=dataset_name,
                                                                x_dim=data_dim, y_dim=data_dim,
                                                                n_train=args.n_train,
                                                                n_test=args.n_test, n_eval=args.n_eval,
-                                                               num_components=n_comp))
+                                                               num_components=n_comp,
+                                                               radius = args.gm_2d_radius,
+                                                               variance = args.gm_2d_variance))
         snapshot_file_name = (f"data_snapshot_{dataset_name}"
                               f"_ncomp_{n_comp}"
+                              f"_radius_{args.gm_2d_radius}"
+                              f"_variance_{args.gm_2d_variance}"
                               f"_data_dim_{data_dim}"
                               f"_n_train_test_eval_{args.n_train}_{args.n_test}_{args.n_eval}.pkl")
+        logger.info("Plotting gaussian mixture 2d...")
+        Visualizer.plot_one_distribution_2d_gaussian(x=data_snapshot_dict["train"]["x1"],
+                                                     title="Gaussian mixture distribution",
+                                                     save_path=os.path.join(DATASET_FIGURES_PATH, f"gaussian_mixture_2d_{TIMESTAMP}.png"))
     elif dataset_name == "skewed_gaussian_2d":
         dist_params = ["mean", "cov", "shape"]
         assert all(hasattr(args, dist_param) for dist_param in dist_params)
@@ -141,6 +153,7 @@ if __name__ == "__main__":
                               f"_n_train_{args.n_train}"
                               f"_n_test_{args.n_test}"
                               f"_n_eval_{args.n_eval}.pkl")
+
     # 2d sklearn 2d distributions
     elif dataset_name in ["circles"]:
         x_dim = y_dim = 2
@@ -149,8 +162,8 @@ if __name__ == "__main__":
                                                                                 x_dim=x_dim, y_dim=y_dim,
                                                                                 n_train=args.n_train,
                                                                                 n_test=args.n_test, n_eval=args.n_eval))
-        Visualizer.plot_one_2d_distribution(x=data_snapshot_dict["train"]["x1"],
-                                            save_path=os.path.join(DATASET_FIGURES_PATH,f"{dataset_name}_{TIMESTAMP}.png"))
+        Visualizer.plot_one_2d_distribution_scatter(x=data_snapshot_dict["train"]["x1"],
+                                                    save_path=os.path.join(DATASET_FIGURES_PATH,f"{dataset_name}_{TIMESTAMP}.png"))
         snapshot_file_name = (f"data_snapshot_{dataset_name}"
                               f"_n_train_{args.n_train}"
                               f"_n_test_{args.n_test}"
