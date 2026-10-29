@@ -989,15 +989,54 @@ class Visualizer:
             x1: torch.Tensor,
             x1_hat: torch.Tensor,
             title: str,
-            save_path: Union[str,None] = None,
+            save_path: Union[str, None] = None,
             grid_size: int = 250,
             levels: int = 45,
+            x1_range: Optional[tuple] = None,
+            x2_range: Optional[tuple] = None,
+            margin_ratio: float = 0.15,
     ):
         distributions = [
             (x0, "Base Distribution"),
             (x1, "Target"),
             (x1_hat, "Inferred"),
         ]
+
+        # Validate and combine samples
+        all_samples = torch.cat(
+            [x.detach().cpu() for x, _ in distributions],
+            dim=0,
+        )
+
+        if all_samples.ndim != 2 or all_samples.shape[1] != 2:
+            raise ValueError("All distributions must have shape (N, 2)")
+
+        global_min = all_samples.min(dim=0).values.numpy()
+        global_max = all_samples.max(dim=0).values.numpy()
+
+        margin = np.maximum(
+            margin_ratio * (global_max - global_min),
+            1e-3,
+        )
+
+        # Use provided ranges or automatically determine them
+        if x1_range is None:
+            x1_range = (
+                global_min[0] - margin[0],
+                global_max[0] + margin[0],
+            )
+
+        if x2_range is None:
+            x2_range = (
+                global_min[1] - margin[1],
+                global_max[1] + margin[1],
+            )
+
+        # Shared grid for all distributions
+        x1_grid = np.linspace(*x1_range, grid_size)
+        x2_grid = np.linspace(*x2_range, grid_size)
+        X1, X2 = np.meshgrid(x1_grid, x2_grid)
+        grid = np.vstack((X1.ravel(), X2.ravel()))
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
 
@@ -1007,40 +1046,27 @@ class Visualizer:
             if x.ndim != 2 or x.shape[1] != 2:
                 raise ValueError(f"{subtitle}: x must have shape (N, 2)")
 
-            margin = 0.15 * np.ptp(x, axis=0)
-            margin = np.maximum(margin, 1e-3)
-
-            x0_grid = np.linspace(
-                x[:, 0].min() - margin[0],
-                x[:, 0].max() + margin[0],
-                grid_size,
-            )
-            x1_grid = np.linspace(
-                x[:, 1].min() - margin[1],
-                x[:, 1].max() + margin[1],
-                grid_size,
-            )
-
-            X0, X1 = np.meshgrid(x0_grid, x1_grid)
-
-            # Kernel Density Estimation
             kde = gaussian_kde(x.T)
-            Z = kde(np.vstack((X0.ravel(), X1.ravel()))).reshape(X0.shape)
+            Z = kde(grid).reshape(X1.shape)
 
             ax.set_facecolor("#440154")
 
             ax.contourf(
-                X0, X1, Z,
+                X1, X2, Z,
                 levels=levels,
                 cmap="viridis",
             )
             ax.contour(
-                X0, X1, Z,
+                X1, X2, Z,
                 levels=levels,
                 colors="white",
                 linewidths=0.25,
                 alpha=0.45,
             )
+
+            ax.set_xlim(x1_range)
+            ax.set_ylim(x2_range)
+            ax.set_aspect("equal", adjustable="box")
 
             ax.set_title(subtitle, fontsize=18)
             ax.set_xlabel(r"$x_1$", fontsize=14)

@@ -333,8 +333,14 @@ if __name__ == "__main__":
         # Gaussian like plots
         title = titles_dict[dataset_name]
         logger.info(f"Visualizing {dataset_name}")
+        x1_range = None
+        x2_range = None
+        if dataset_name == "skewed_gaussian_2d":
+            x1_range = (-6, 6)  # via experimentation
+            x2_range = (-6, 6)
         Visualizer.plot_three_gaussian_like_distributions_2d_gaussian(x0=x0, x1=x1, x1_hat=x1_hat,
                                                                       title=title,
+                                                                      x1_range=x1_range, x2_range=x2_range,
                                                                       save_path=figure_path)
 
     elif dataset_name in ["circles"]:
