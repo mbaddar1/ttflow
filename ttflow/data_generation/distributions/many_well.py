@@ -1,3 +1,4 @@
+import math
 from typing import Optional, Dict
 
 from seaborn import kdeplot
@@ -18,6 +19,8 @@ The many_well dataset is used in this paper
 Sampling from Boltzmann densities with physics informed low-rank formats
 https://arxiv.org/pdf/2412.07637
 """
+
+
 # from fab.target_distributions.base import TargetDistribution
 # from fab.utils.training import DatasetIterator
 # from fab.target_distributions.double_well import DoubleWellEnergy
@@ -64,7 +67,7 @@ class Energy(torch.nn.Module):
 
 
 class DoubleWellEnergy(Energy, nn.Module):
-    def __init__(self, dim=2, a=-0.5, b=-6.0, c=1.,use_gpu=True):
+    def __init__(self, dim=2, a=-0.5, b=-6.0, c=1., use_gpu=True):
         assert dim == 2  # We only use the 2D version
         super().__init__(dim)
         self._a = a
@@ -110,7 +113,7 @@ class DoubleWellEnergy(Energy, nn.Module):
             com = torch.distributions.Normal(self.means.to(device), self.scales.to(device))
 
             proposal = torch.distributions.MixtureSameFamily(mixture_distribution=mix,
-                                                             component_distribution=com,validate_args=True)
+                                                             component_distribution=com, validate_args=True)
 
             k = TARGET_Z * 3
 
@@ -148,7 +151,7 @@ class ManyWellEnergy(DoubleWellEnergy):  # , TargetDistribution):
                  a=-0.5, b=-6.0, c=1.):
         assert dim % 2 == 0
         self.n_wells = dim // 2
-        super(ManyWellEnergy, self).__init__(dim=2, a=a, b=b, c=c,use_gpu=use_gpu)
+        super(ManyWellEnergy, self).__init__(dim=2, a=a, b=b, c=c, use_gpu=use_gpu)
         self.dim = dim
         self.centre = 1.7
         self.max_dim_for_all_modes = 40  # otherwise we get memory issues on huuuuge test set
@@ -302,7 +305,7 @@ class ManyWell_Gaussian():
         """Sample by sampling each pair of dimensions from the double well problem
         using rejection sampling for the first dimension, and exact sampling for the second. """
         if self.concat_gaussian:
-            return torch.concat([self.ManyWellDist.sample(shape), self.GaussianDist.sample(shape)],dim=-1)
+            return torch.concat([self.ManyWellDist.sample(shape), self.GaussianDist.sample(shape)], dim=-1)
         else:
             return self.ManyWellDist.sample(shape)
 
@@ -314,39 +317,58 @@ class ManyWell_Gaussian():
         return log_prob
 
     @staticmethod
-    def pairwise_plot(sample: torch.Tensor,output_file_name:str):
-        assert sample.dim() == 2
+    def pairwise_plot(
+            sample: torch.Tensor,
+            output_file_name: str,
+            max_points: int = 5000,  # subsample for KDE speed
+            cell_size: float = 4.0,
+            dpi: int = 150,
+    ):
+        """
+        Plot 2D KDEs of disjoint dimension pairs (0,1), (2,3), ... in a
+        semi-square grid. Supported dims: 2, 4, 8, 16.
+        """
+        assert sample.dim() == 2, "sample must be of shape (N, d)"
         d = sample.shape[1]
-        assert d <=8
-        assert d%2==0
-        num_pairs = d // 2
+        assert d in (2, 4, 8, 16), f"d must be one of 2, 4, 8, 16 (got {d})"
+
         X = sample.detach().cpu()
-        fig, axes = plt.subplots(1, num_pairs, figsize=(5 * num_pairs, 4))
+        if X.shape[0] > max_points:
+            X = X[torch.randperm(X.shape[0])[:max_points]]
+        X = X.numpy()
 
-        if num_pairs == 1:
-            axes = [axes]
+        pairs = [(2 * i, 2 * i + 1) for i in range(d // 2)]
 
-        for i in range(num_pairs):
-            ax = axes[i]
-            dim1 = 2 * i
-            dim2 = 2 * i + 1
+        # semi-square grid: rows = largest divisor of n that is <= sqrt(n)
+        n = len(pairs)
+        rows = int(math.sqrt(n))
+        while n % rows:
+            rows -= 1
+        cols = n // rows
 
+        fig, axes = plt.subplots(
+            rows, cols,
+            figsize=(cell_size * cols, cell_size * rows),
+            squeeze=False,
+        )
+
+        for ax, (a, b) in zip(axes.flat, pairs):
             kdeplot(
-                x=X[:, dim1].numpy(),
-                y=X[:, dim2].numpy(),
+                x=X[:, a],
+                y=X[:, b],
                 fill=True,
                 cmap="viridis",
                 thresh=0.05,
-                levels=100,
-                ax=ax
+                levels=50,
+                ax=ax,
             )
-            ax.set_title(f"KDE of dims ({dim1},{dim2})")
-            ax.set_xlabel(f"x{dim1}")
-            ax.set_ylabel(f"x{dim2}")
+            ax.set_title(f"dims ({a}, {b})")
+            ax.set_xlabel(f"x{a}")
+            ax.set_ylabel(f"x{b}")
 
-        plt.tight_layout()
-        plt.savefig(output_file_name)
-
+        fig.tight_layout()
+        fig.savefig(output_file_name, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
 
 
 class ManyWell_Gaussian_Jannis():
@@ -354,7 +376,7 @@ class ManyWell_Gaussian_Jannis():
 
     def __init__(self, dim=16,
                  a=-0.5, b=-6.0, c=1.,
-                 many_well_dim=4,use_gpu=False):
+                 many_well_dim=4, use_gpu=False):
         self.OneDimDoubleWell = DoubleWellEnergy(dim=2,
                                                  a=a, b=b, c=c)
 
