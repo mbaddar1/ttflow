@@ -4,6 +4,8 @@ import pickle
 from typing import Tuple, Optional, Iterable, List, Union
 
 import sys
+
+import pykeops
 from loguru import logger
 import torch.nn
 from torchdiffeq import odeint
@@ -11,12 +13,13 @@ from datetime import datetime
 from geomloss import SamplesLoss
 
 from ttflow.data_generation.data_utils import DataUtils
+from ttflow.training.nn.nn_models import VelocityFieldRegressionNet
 from ttflow.viz.viz import Visualizer
 from tqdm import tqdm
-import numpy as np
 
 INFERENCE_FIGURES_DIR = "figures/inference/experimental"
 INFERENCE_LOGS_DIR = "logs/inference"
+TRAJECTORY_FIGUERES_DIR = "figures/trajectories"
 
 
 class InferenceHandler:
@@ -216,6 +219,10 @@ if __name__ == "__main__":
     # calculate sink-horn score
     args = parse_args()
     logger.info(f"Parsed args = {args}")
+    # check if torch can see gpu or not
+    logger.info(f"Is cuda available for pytorch ? {torch.cuda.is_available()}")
+    # check if cuda and gpu accessible by keops
+    logger.info(f"KeOps GPU available ? {pykeops.config.gpu_available}")
     # set inference params
 
     # set filepaths
@@ -227,6 +234,10 @@ if __name__ == "__main__":
     assert isinstance(vt_artifact, dict)
     logger.info(f"loaded vt artifact(dict) : \n {vt_artifact}")
     logger.info(f"vt_model = \n{vt_artifact["models"][0]}")
+    if len(vt_artifact["models"]) >= 1 and isinstance(vt_artifact["models"][0], VelocityFieldRegressionNet):
+        model_arch_name = str(VelocityFieldRegressionNet.__name__)
+    else:
+        raise ValueError("Unknown model type for vt")
     logger.info(f"num_reflows = {vt_artifact['reflows']}")
     data_snapshot_file_path = vt_artifact["data_snapshot_filepath"]
     logger.info("Loading data_snapshot from {}".format(data_snapshot_file_path))
@@ -280,22 +291,34 @@ if __name__ == "__main__":
         logger.info(
             f"*** Starting inference x0->x1_hat over t_eval : x0.shape = {x0.shape} | "
             f"len(t_eval) = {len(t_eval)} | "
-            f"odesolve_method = {args.ode_solver_method}***")
+            f"ode_solve_method = {args.ode_solver_method}***")
         start_time = datetime.now()
         traj = inference_handler.infer(x0=x0, t_eval=t_eval, ode_solver_method=ode_solver_method)
         end_time = datetime.now()
         inference_time_seconds = (end_time - start_time).total_seconds()
     else:
         raise NotImplementedError("This inference case is not implemented")
+    ################################
+    #### Trajectory plotting #######
+    ################################
     # Viz the trajectory (sample of it)
     trajectory_plotting_sample_size = 100
     trajectory_reshaped = InferenceHandler.reshape_trajectory(trajectory=traj, tensor_shape=x0.shape)
     sample_trajectory = Visualizer.sample_trajectory(trajectory=trajectory_reshaped,
                                                      sample_size=trajectory_plotting_sample_size)
-    Visualizer.plot_trajectory_1d_vs_time(trajectory=sample_trajectory, t_evals=t_eval)
-    Visualizer.plot_trajectory_2d_space(trajectory=sample_trajectory)
-    x1_hat = list(traj)[-1].reshape(x0.shape)
+    data_params_text = ", ".join(f"{k}={v}" for k, v in data_params.items())
+    trajectory_output_filename = (f"trajectory_{dataset_name}_{model_arch_name}_"
+                                  f"num_reflows_{num_reflows}_{data_params_text}_{ode_solver_method}_"
+                                  f"{TIMESTAMP}.png")
+    trajectory_output_filepath = os.path.join(TRAJECTORY_FIGUERES_DIR, trajectory_output_filename)
+    # Omit 1d trajectory plotting, focus on the 2d one
+    # Visualizer.plot_trajectory_1d_vs_time(trajectory=sample_trajectory, t_evals=t_eval)
+    Visualizer.plot_trajectory_2d_space(trajectory=sample_trajectory, output_path=trajectory_output_filepath)
 
+    ######################
+    #### Evaluation ######
+    ######################
+    x1_hat = list(traj)[-1].reshape(x0.shape)
     for j in range(len(x1.shape)):
         assert x1.shape[j] == x1_hat.shape[j]
     logger.info("*** Starting the evaluation process ***")
@@ -317,10 +340,13 @@ if __name__ == "__main__":
         f"{'=' * SEP_LINE_LEN}"
     )
 
-    # TODO make dataset specific visualization
+    #######################################
+    ### Generation Results Visualization ##
+    #######################################
 
     filename = (f"inference_"
                 f"{dataset_name}_"
+                f"model_arch_{model_arch_name}_"
                 f"data_params_{data_params_flat}_"
                 f"timestamp_{TIMESTAMP}_"
                 f"trajectory_model_{traj_model}_"
@@ -328,8 +354,9 @@ if __name__ == "__main__":
                 f"num_reflows_{num_reflows}.png")
     figure_path = os.path.join(INFERENCE_FIGURES_DIR, filename)
     logger.info("Staring visualization...")
-    titles_dict = {"skewed_gaussian_2d": "Skewed Gaussian 2D", "gaussian_mixture_2d": "Gaussian Mixture 2D"}
-    if dataset_name in ["skewed_gaussian_2d", "gaussian_mixture_2d"]:
+    titles_dict = {"many_well": "Many Well", "skewed_gaussian_2d": "Skewed Gaussian 2D",
+                   "gaussian_mixture_2d": "Gaussian Mixture 2D"}
+    if dataset_name in ["many_well", "skewed_gaussian_2d", "gaussian_mixture_2d"]:
         # Gaussian like plots
         title = titles_dict[dataset_name]
         logger.info(f"Visualizing {dataset_name}")
@@ -337,11 +364,16 @@ if __name__ == "__main__":
         x2_range = None
         if dataset_name == "skewed_gaussian_2d":
             x1_range = (-6, 6)  # via experimentation
-            x2_range = (-6, 6)
-        Visualizer.plot_three_gaussian_like_distributions_2d_gaussian(x0=x0, x1=x1, x1_hat=x1_hat,
-                                                                      title=title,
-                                                                      x1_range=x1_range, x2_range=x2_range,
-                                                                      save_path=figure_path)
+            x1_hat_range = (-6, 6)
+        else:
+            logger.warning("Setting plot range for x1 and x1_hat to be None and auto-detected by plot method. "
+                           "Set it manually via experimentation")
+        logger.info(f"Visualizing {dataset_name} and saving figure to {figure_path}...")
+        Visualizer.plot_three_samples_nd_with_contours(x0=x0, x1=x1, x1_hat=x1_hat,
+                                                       title=title,
+                                                       x0_range=(-4, 4),
+                                                       x1_range=x1_range, x1_hat_range=x2_range,
+                                                       save_path=figure_path)
 
     elif dataset_name in ["circles"]:
         # scatter-like plots # TODO fix or modify
