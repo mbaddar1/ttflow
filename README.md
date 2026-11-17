@@ -49,9 +49,10 @@ Quoted from the Rectified flow paper , p23 the `experimental settings section`
 * Using $\pi_0$ as Gaussian
 * We use MLP and U-Net (with possible adaption to tabular data ??)
 * Solvers : euler, rk4 and dopri8
-## Preliminary Results 
-* Experiments dump can be found in this subdir `experiments_and_results`
-* This file `experiments_journal.md` tracks important experiments, results and some observations
+
+## Experiment 1
+
+
 
 ___
 ## Key takeaways and observations 

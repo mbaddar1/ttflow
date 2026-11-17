@@ -1,4 +1,4 @@
-import logging
+import math
 import os
 import random
 from pathlib import Path
@@ -7,6 +7,7 @@ from loguru import logger
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
+from matplotlib.gridspec import GridSpecFromSubplotSpec, GridSpec
 from scipy.ndimage.filters import gaussian_filter
 from scipy.stats import gaussian_kde
 
@@ -790,71 +791,109 @@ class Visualizer:
 
     @staticmethod
     def plot_trajectory_2d_space(
-            trajectory: List[torch.Tensor],
+            trajectory: Union[List[torch.Tensor], torch.Tensor],
             output_path: str = "rectified_flow_2d_space.png",
+            max_trajectories: Optional[int] = None,
+            subplot_size: float = 4.0,
     ) -> None:
-        """Plots 2D spatial paths of trajectories from z0 to z1.
+        """Plots 2D spatial paths of trajectories from z0 to z1 for up to 16 dims.
+
+        Dimensions are partitioned into consecutive pairs (0,1), (2,3), ... and each
+        pair is drawn in its own subplot. The grid layout is chosen automatically.
 
         Args:
-            trajectory: List of length T containing Tensors of shape (N, 2).
+            trajectory: List of length T containing Tensors of shape (N, D), or a
+                Tensor of shape (T, N, D), with D even and 2 <= D <= 16.
             output_path: File path where the plot will be saved.
+            max_trajectories: Optionally limit the number of trajectories drawn
+                (the first K) to keep the plots readable.
+            subplot_size: Side length (inches) of each subplot.
         """
-        # Stack list into tensor of shape (T, N, 2)
         traj_tensor = (
             torch.stack(trajectory, dim=0)
-            if isinstance(trajectory, list)
+            if isinstance(trajectory, (list, tuple))
             else trajectory
         )
 
-        T, N, num_dims = traj_tensor.shape
-        assert num_dims == 2, f"Expected 2D tensors (N, 2), but got {num_dims}D."
+        T, N, D = traj_tensor.shape
+        assert D % 2 == 0, f"Number of dimensions must be even, but got D={D}."
+        assert 2 <= D <= 16, f"Expected 2 <= D <= 16 dimensions, but got D={D}."
+
+        if max_trajectories is not None:
+            N = min(N, max_trajectories)
+            traj_tensor = traj_tensor[:, :N]
 
         traj_np = traj_tensor.detach().cpu().numpy()
 
-        fig, ax = plt.subplots(figsize=(8, 8))
+        # Partition dimensions into consecutive pairs: (0,1), (2,3), ...
+        pairs = [(i, i + 1) for i in range(0, D, 2)]
+        num_plots = len(pairs)  # == D // 2
+
+        # Automatic grid: near-square, columns >= rows
+        ncols = math.ceil(math.sqrt(num_plots))
+        nrows = math.ceil(num_plots / ncols)
+
+        fig, axes = plt.subplots(
+            nrows,
+            ncols,
+            figsize=(subplot_size * ncols, subplot_size * nrows),
+            squeeze=False,
+        )
+        axes_flat = axes.ravel()
         colors = plt.cm.viridis([i / max(1, N - 1) for i in range(N)])
 
-        for idx in range(N):
-            x_coords = traj_np[:, idx, 0]  # Dimension 0
-            y_coords = traj_np[:, idx, 1]  # Dimension 1
-            color = colors[idx]
+        for plot_idx, (d_x, d_y) in enumerate(pairs):
+            ax = axes_flat[plot_idx]
 
-            # Plot 2D spatial trajectory curve
-            ax.plot(x_coords, y_coords, color=color, alpha=0.6, linewidth=1.2)
+            for idx in range(N):
+                x_coords = traj_np[:, idx, d_x]
+                y_coords = traj_np[:, idx, d_y]
+                color = colors[idx]
 
-            # Mark Start point z0 (t=0)
-            ax.scatter(
-                x_coords[0],
-                y_coords[0],
-                color=color,
-                marker="o",
-                s=30,
-                zorder=4,
-                edgecolors="k",
-                linewidth=0.5,
-                label="Start ($z_0$)" if idx == 0 else "",
-            )
+                # 2D spatial trajectory curve
+                ax.plot(x_coords, y_coords, color=color, alpha=0.6, linewidth=1.2)
 
-            # Mark End point z1 (t=1)
-            ax.scatter(
-                x_coords[-1],
-                y_coords[-1],
-                color=color,
-                marker="X",
-                s=40,
-                zorder=4,
-                edgecolors="k",
-                linewidth=0.5,
-                label="End ($z_1$)" if idx == 0 else "",
-            )
+                # Start point z0 (t=0)
+                ax.scatter(
+                    x_coords[0],
+                    y_coords[0],
+                    color=color,
+                    marker="o",
+                    s=30,
+                    zorder=4,
+                    edgecolors="k",
+                    linewidth=0.5,
+                    label="Start ($z_0$)" if idx == 0 else "",
+                )
 
-        ax.set_title(f"2D Rectified Flow Spatial Trajectories ($N={N}$)", fontsize=13)
-        ax.set_xlabel("Dimension 0 ($z^{(0)}$)", fontsize=11)
-        ax.set_ylabel("Dimension 1 ($z^{(1)}$)", fontsize=11)
-        ax.grid(True, linestyle="--", alpha=0.5)
-        ax.legend(loc="best")
-        ax.set_aspect("equal", adjustable="datalim")
+                # End point z1 (t=1)
+                ax.scatter(
+                    x_coords[-1],
+                    y_coords[-1],
+                    color=color,
+                    marker="X",
+                    s=40,
+                    zorder=4,
+                    edgecolors="k",
+                    linewidth=0.5,
+                    label="End ($z_1$)" if idx == 0 else "",
+                )
 
+            ax.set_title(f"Dims ({d_x}, {d_y})", fontsize=11)
+            ax.set_xlabel(f"Dimension {d_x} ($z^{{({d_x})}}$)", fontsize=10)
+            ax.set_ylabel(f"Dimension {d_y} ($z^{{({d_y})}}$)", fontsize=10)
+            ax.grid(True, linestyle="--", alpha=0.5)
+            ax.set_aspect("equal", adjustable="datalim")
+            if plot_idx == 0:
+                ax.legend(loc="best", fontsize=8)
+
+        # Hide unused axes (e.g., 3 pairs -> 2x2 grid leaves one empty)
+        for ax in axes_flat[num_plots:]:
+            ax.set_visible(False)
+
+        fig.suptitle(
+            f"Rectified Flow Spatial Trajectories ($N={N}$, $D={D}$)", fontsize=14
+        )
         plt.tight_layout()
 
         # Save output
@@ -862,10 +901,9 @@ class Visualizer:
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
 
-        plt.savefig(output_path, dpi=300, bbox_inches="tight")
-        plt.close()
-        logger.info(f"Saved 2D spatial trajectory plot to: {output_path}")
-
+        plt.savefig(output_path, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        logger.info(f"Saved {num_plots} 2D spatial trajectory plots to: {output_path}")
 
     @staticmethod
     def plot_three_gaussian_dist(
@@ -983,91 +1021,109 @@ class Visualizer:
         plt.show()
         return fig, ax
 
-    @staticmethod
-    def plot_three_gaussian_like_distributions_2d_gaussian(
+    # ----------------------------------------------------------------------
+    # Router method to plot three distributions4
+    # This method is to plot x0,x1,x1_hat for 2D and other higher dimensional with pair-wise approach
+    # ----------------------------------------------------------------------
+    @classmethod
+    def plot_three_samples_nd_with_contours(
+            cls,
             x0: torch.Tensor,
             x1: torch.Tensor,
             x1_hat: torch.Tensor,
             title: str,
             save_path: Union[str, None] = None,
+            x0_range: Optional[tuple] = None,
+            x1_range: Optional[tuple] = None,
+            x1_hat_range: Optional[tuple] = None,
+            **kwargs,
+    ):
+        """Dispatch on data dimensionality.
+
+        D == 2 -> side-by-side 2D contour plot (_plot_three_strict_2d).
+        D > 2  -> three panels, each a grid of contour plots for the
+                  disjoint consecutive pairs (0,1), (2,3), (4,5), ...
+                  (_plot_three_pairwise).
+
+        x0_range / x1_range / x1_hat_range: (min, max) used for BOTH axes of
+        every subplot belonging to that distribution (base / target / inferred).
+        If None, the range is computed automatically from the data.
+        Extra kwargs (grid_size, levels, margin_ratio, ...) go to the sub-method.
+        """
+        if any(x.ndim != 2 for x in (x0, x1, x1_hat)):
+            raise ValueError("All distributions must have shape (N, D)")
+
+        dims = {x0.shape[-1], x1.shape[-1], x1_hat.shape[-1]}
+        if len(dims) != 1:
+            raise ValueError(f"All distributions must share the same D, got {dims}")
+
+        d = dims.pop()
+        if d < 2:
+            raise ValueError("Need at least 2 dimensions to plot")
+
+        plot_fn = cls._plot_three_strict_2d if d == 2 else cls._plot_three_pairwise
+        return plot_fn(
+            x0, x1, x1_hat, title, save_path,
+            x0_range=x0_range, x1_range=x1_range, x1_hat_range=x1_hat_range,
+            **kwargs,
+        )
+
+    # ------------------------------------------------------------------
+    # Shared helper
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _kde_contour(ax, samples_2d: np.ndarray, X1, X2, levels: int,
+                     max_kde_samples: Optional[int] = None):
+        if max_kde_samples is not None and len(samples_2d) > max_kde_samples:
+            idx = np.random.choice(len(samples_2d), max_kde_samples, replace=False)
+            samples_2d = samples_2d[idx]
+
+        grid = np.vstack((X1.ravel(), X2.ravel()))
+        Z = gaussian_kde(samples_2d.T)(grid).reshape(X1.shape)
+
+        ax.set_facecolor("#440154")
+        ax.contourf(X1, X2, Z, levels=levels, cmap="viridis")
+        ax.contour(X1, X2, Z, levels=levels, colors="white",
+                   linewidths=0.25, alpha=0.45)
+
+    # ------------------------------------------------------------------
+    # Sub-method 1: strictly 2D
+    # ------------------------------------------------------------------
+    @classmethod
+    def _plot_three_strict_2d(
+            cls,
+            x0, x1, x1_hat,
+            title: str,
+            save_path: Union[str, None] = None,
             grid_size: int = 250,
             levels: int = 45,
+            x0_range: Optional[tuple] = None,
             x1_range: Optional[tuple] = None,
-            x2_range: Optional[tuple] = None,
+            x1_hat_range: Optional[tuple] = None,
             margin_ratio: float = 0.15,
     ):
         distributions = [
-            (x0, "Base Distribution"),
-            (x1, "Target"),
-            (x1_hat, "Inferred"),
+            (x0, "Base Distribution", x0_range),
+            (x1, "Target", x1_range),
+            (x1_hat, "Inferred", x1_hat_range),
         ]
 
-        # Validate and combine samples
-        all_samples = torch.cat(
-            [x.detach().cpu() for x, _ in distributions],
-            dim=0,
-        )
-
-        if all_samples.ndim != 2 or all_samples.shape[1] != 2:
-            raise ValueError("All distributions must have shape (N, 2)")
-
-        global_min = all_samples.min(dim=0).values.numpy()
-        global_max = all_samples.max(dim=0).values.numpy()
-
-        margin = np.maximum(
-            margin_ratio * (global_max - global_min),
-            1e-3,
-        )
-
-        # Use provided ranges or automatically determine them
-        if x1_range is None:
-            x1_range = (
-                global_min[0] - margin[0],
-                global_max[0] + margin[0],
-            )
-
-        if x2_range is None:
-            x2_range = (
-                global_min[1] - margin[1],
-                global_max[1] + margin[1],
-            )
-
-        # Shared grid for all distributions
-        x1_grid = np.linspace(*x1_range, grid_size)
-        x2_grid = np.linspace(*x2_range, grid_size)
-        X1, X2 = np.meshgrid(x1_grid, x2_grid)
-        grid = np.vstack((X1.ravel(), X2.ravel()))
+        # Automatic range (used where a range is None): shared by both axes
+        all_samples = torch.cat([x.detach().cpu() for x, _, _ in distributions], dim=0)
+        lo, hi = all_samples.min().item(), all_samples.max().item()
+        m = max(margin_ratio * (hi - lo), 1e-3)
+        auto_range = (lo - m, hi + m)
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
+        for ax, (x, subtitle, rng) in zip(axes, distributions):
+            rng = rng if rng is not None else auto_range
 
-        for ax, (x, subtitle) in zip(axes, distributions):
-            x = x.detach().cpu().numpy()
-
-            if x.ndim != 2 or x.shape[1] != 2:
-                raise ValueError(f"{subtitle}: x must have shape (N, 2)")
-
-            kde = gaussian_kde(x.T)
-            Z = kde(grid).reshape(X1.shape)
-
-            ax.set_facecolor("#440154")
-
-            ax.contourf(
-                X1, X2, Z,
-                levels=levels,
-                cmap="viridis",
-            )
-            ax.contour(
-                X1, X2, Z,
-                levels=levels,
-                colors="white",
-                linewidths=0.25,
-                alpha=0.45,
-            )
-
-            ax.set_xlim(x1_range)
-            ax.set_ylim(x2_range)
+            X1, X2 = np.meshgrid(np.linspace(*rng, grid_size),
+                                 np.linspace(*rng, grid_size))
+            cls._kde_contour(ax, x.detach().cpu().numpy(), X1, X2, levels)
+            ax.set_xlim(rng)
+            ax.set_ylim(rng)
             ax.set_aspect("equal", adjustable="box")
-
             ax.set_title(subtitle, fontsize=18)
             ax.set_xlabel(r"$x_1$", fontsize=14)
             ax.set_ylabel(r"$x_2$", fontsize=14)
@@ -1075,9 +1131,94 @@ class Visualizer:
 
         fig.suptitle(title, fontsize=22)
         fig.tight_layout()
-
         if save_path is not None:
             fig.savefig(save_path, dpi=200, bbox_inches="tight")
-
         plt.show()
         return fig, axes
+
+    # ------------------------------------------------------------------
+    # Sub-method 2: D > 2, 3 outer panels, each a grid of consecutive pairs
+    # ------------------------------------------------------------------
+    @classmethod
+    def _plot_three_pairwise(
+            cls,
+            x0, x1, x1_hat,
+            title: str,
+            save_path: Union[str, None] = None,
+            grid_size: int = 100,
+            levels: int = 30,
+            x0_range: Optional[tuple] = None,
+            x1_range: Optional[tuple] = None,
+            x1_hat_range: Optional[tuple] = None,
+            margin_ratio: float = 0.15,
+            max_kde_samples: Optional[int] = 3000,
+            cell_size: float = 2.6,  # inches per inner subplot
+    ):
+        distributions = [
+            (x0, "Base Distribution", x0_range),
+            (x1, "Target", x1_range),
+            (x1_hat, "Inferred", x1_hat_range),
+        ]
+        data = [x.detach().cpu().numpy() for x, _, _ in distributions]
+        d = data[0].shape[1]
+
+        # Disjoint consecutive pairs: (0,1), (2,3), (4,5), ...
+        pairs = [(k, k + 1) for k in range(0, d - 1, 2)]
+        if d % 2 == 1:
+            warnings.warn(f"D={d} is odd; last dimension x_{d - 1} is not plotted.")
+        n_pairs = len(pairs)
+
+        n_cols = int(np.ceil(np.sqrt(n_pairs)))
+        n_rows = int(np.ceil(n_pairs / n_cols))
+
+        # Automatic range per dimension (used where a range is None):
+        # computed from target and inferred only, shared by the three panels
+        ref = np.concatenate(data[1:], axis=0)
+
+        def _auto_range(k: int) -> tuple:
+            lo, hi = ref[:, k].min(), ref[:, k].max()
+            m = max(margin_ratio * (hi - lo), 1e-3)
+            return (lo - m, hi + m)
+
+        panel_w, panel_h = n_cols * cell_size, n_rows * cell_size
+        fig = plt.figure(figsize=(3 * panel_w + 2.0, panel_h + 1.4))
+
+        outer = GridSpec(1, 3, figure=fig, wspace=0.22,
+                         left=0.05, right=0.99, bottom=0.10, top=0.84)
+
+        axes_all = []
+        for k, ((_, subtitle, rng), samples) in enumerate(zip(distributions, data)):
+            inner = GridSpecFromSubplotSpec(
+                n_rows, n_cols, subplot_spec=outer[k], wspace=0.40, hspace=0.45
+            )
+
+            bbox = outer[k].get_position(fig)
+            fig.text((bbox.x0 + bbox.x1) / 2, bbox.y1 + 0.02, subtitle,
+                     ha="center", va="bottom", fontsize=18)
+
+            panel_axes = {}
+            for p, (i, j) in enumerate(pairs):
+                # Fixed range for this distribution applies to both axes
+                h_range = rng if rng is not None else _auto_range(i)
+                v_range = rng if rng is not None else _auto_range(j)
+
+                ax = fig.add_subplot(inner[p // n_cols, p % n_cols])
+
+                X1, X2 = np.meshgrid(np.linspace(*h_range, grid_size),
+                                     np.linspace(*v_range, grid_size))
+                cls._kde_contour(ax, samples[:, [i, j]], X1, X2, levels,
+                                 max_kde_samples=max_kde_samples)
+                ax.set_xlim(h_range)
+                ax.set_ylim(v_range)
+                ax.tick_params(axis="both", labelsize=8)
+                ax.set_xlabel(rf"$x_{{{i}}}$", fontsize=11)
+                ax.set_ylabel(rf"$x_{{{j}}}$", fontsize=11)
+
+                panel_axes[(i, j)] = ax
+            axes_all.append(panel_axes)
+
+        fig.suptitle(title, fontsize=22)
+        if save_path is not None:
+            fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        plt.show()
+        return fig, axes_all  # axes_all[k][(i, j)] -> Axes
