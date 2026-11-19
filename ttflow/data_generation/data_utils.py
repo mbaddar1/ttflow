@@ -239,12 +239,18 @@ class DataUtils:
             x1 = make_swiss_roll(n_samples=n, noise=noise)[0][:, [0, 2]]
         elif dataset_name == "moons":
             x1, _ = make_moons(n_samples=n, noise=noise)
-        elif dataset_name == "manywell":
-            assert "data_dim" in kwargs.keys() and isinstance(kwargs["data_dim"], int)
+        elif dataset_name == "many_well":
+            assert "many_well_total_data_dim" in kwargs.keys() and isinstance(kwargs["many_well_total_data_dim"], int)
             assert "many_well_dim" in kwargs.keys() and isinstance(kwargs["many_well_dim"], int)
-            many_well_gaussian_dist = ManyWell_Gaussian(dim=kwargs["data_dim"], many_well_dim=kwargs["many_well_dim"],
+            many_well_total_dim = kwargs["many_well_total_data_dim"]
+            many_well_dim = kwargs["many_well_dim"]
+
+            many_well_gaussian_dist = ManyWell_Gaussian(dim=many_well_total_dim, many_well_dim=many_well_dim,
                                                         normalised=True, use_gpu=False)
+            logger.info("viz manywell...")
             x1 = many_well_gaussian_dist.sample([n])
+            dummy_time_stamp = datetime.now().isoformat()
+            ManyWell_Gaussian.pairwise_plot(sample=x1,output_file_name=os.path.join(FIGURES_DIR,f"many_well_dims_{many_well_total_dim}_{many_well_dim}_{dummy_time_stamp}.png"))
         elif dataset_name == "gaussian_mixture_2d":
             num_components_key_name = "num_components"
             kwargs_has_ncomps = num_components_key_name in kwargs.keys()
