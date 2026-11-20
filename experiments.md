@@ -10,8 +10,16 @@ Common setup for all three experiments:
   * **eval**: used for inference (final evaluation of generated samples)
 * 1-RecFlow = rectified flow with 0 reflows, 2-RecFlow = 1 reflow
 * ODE solvers compared: `euler`, `rk4`, `dopri8`, all with 1000 time points
-* Inference on the 200,000 eval samples
-* Metric: Sinkhorn divergence between real and generated samples, computed over a range of blur values (mean ± std; lower is better). The **real–real** column compares two sets of real samples. It is the floor for a perfect generator.
+* Inference: 200,000 samples are generated per run, the same size as the 200,000-sample eval pool. Reported inference times are for generating all 200K samples.
+* Evaluation protocol (`TransportEvaluator.evaluate_sinkhorn_by_blur` in `ttflow/inference/inference_and_evaluation.py`):
+  * Metric: debiased Sinkhorn divergence (`geomloss.SamplesLoss`, `p=2`), lower is better.
+  * Sinkhorn is **not** computed on the full 200K pools. For each blur value, the evaluator runs **5 repeats**. Each repeat draws random subsets of **10,000** samples: two independent subsets from the real eval pool ($X_1, X_2$) and two from the generated pool ($Y_1, Y_2$).
+  * Each repeat computes three values:
+    * **generated–real**: $S(X_1, Y_1)$
+    * **real–real**: $S(X_1, X_2)$, the sampling-noise floor that a perfect generator would reach
+    * **generated–generated**: $S(Y_1, Y_2)$
+  * The tables report the mean ± std (n−1) of each value over the 5 repeats.
+  * Blur grid: 10 fixed values (0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10) plus 5 data-scale-aware values. These are 0.1×, 0.25×, 0.5×, 1× and 2× the median nearest-neighbour distance of 5,000 real samples, so the blur grid differs slightly between datasets.
 * **Sinkhorn Δ** $= S(\text{generated}, \text{real}) - S(\text{real}, \text{real})$: the generated–real Sinkhorn divergence minus the real–real floor (lower is better, 0 is perfect).
 
 ### Inference time (s)
