@@ -24,6 +24,23 @@
 **Latest result:** <!-- TODO: one sentence + link to experiments.md entry -->
 
 
+## ROADMAP
+
+### Datasets to experiment
+
+Synthetic target densities taken from the Tensor Train Diffusion paper ([Gruhlke et al., 2026](https://arxiv.org/abs/2607.06841)), in planned order:
+
+- [ ] **High-dimensional Multiwell** (Sec. 4.1, Eq. 18): $\rho(x) = \exp\big(-\sum_{i=1}^{m}(x_i^2-\delta)^2 - \tfrac12\sum_{i=m+1}^{d} x_i^2\big)$, with $2^m$ modes
+  - [ ] $d=10,\ m=3,\ \delta=2$ (8 modes), quick sanity check
+  - [ ] $d=50,\ m=5,\ \delta=2$ (32 modes)
+  - [ ] $d=10,\ m=10,\ \delta=2$ (1024 modes), the setting used to compare baselines (App. B.4)
+- [ ] **Anisotropic Gaussian** (Sec. 4.3): $\log\rho(x) = -x^\top M x$, $M$ random full-rank, exact answer known, useful for studying TT ranks
+- [ ] **$\phi^4$ scalar field / Ginzburg–Landau** (Sec. 4.2, Eq. 19): Multiwell plus nearest-neighbour coupling $-\tfrac12\sum_{i=1}^{d-1}(x_i-x_{i+1})^2$, $\delta=2$
+- [ ] **Modified Kitagawa state-space model** (App. B.5): one-mode, strongly correlated posterior, $d=10$, $\sigma_v=\sigma_w=1$, varying nonlinearity $\gamma$
+
+Paper metrics: ESS, $\log Z$ error, log-variance divergence (App. B.2). Baselines (PIS, DDS, DIS, GBS, CMCD, SCLD, CRAFT, AFT, MFVI, MCD) are available in the repository by Chen et al. (2024).
+
+
 ## Overview
 
 Rectified flows are generative models that learn to transport samples from a source distribution $\pi_0$ to a target distribution $\pi_1$.
@@ -151,6 +168,7 @@ TTFLOw/
 - Yan et al. (2024). *PeRFlow: Piecewise Rectified Flow as Universal Plug-and-Play Accelerator.* [arXiv:2405.07510](https://arxiv.org/abs/2405.07510)
 - Oseledets (2011). *Tensor-Train Decomposition.* SIAM J. Sci. Comput. [doi:10.1137/090752286](https://doi.org/10.1137/090752286)
 - Gorodetsky, Karaman & Marzouk (2019). *A continuous analogue of the tensor-train decomposition.* [arXiv:1510.09088](https://arxiv.org/abs/1510.09088)
+- Gruhlke, Berner, Sommer & Richter (2026). *Tensor Train Diffusion: Leveraging Low-Rank Structures for High-Dimensional Score-Based Sampling.* [arXiv:2607.06841](https://arxiv.org/abs/2607.06841)
 - Simple ReFlow: Improved Techniques for Fast Flow Models https://arxiv.org/abs/2410.07815
 - Balanced conic rectified flow https://arxiv.org/abs/2510.25229
 - SlimFlow: Training Smaller One-Step Diffusion
