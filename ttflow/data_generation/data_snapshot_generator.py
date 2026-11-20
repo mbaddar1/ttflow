@@ -30,7 +30,7 @@ TIMESTAMP = datetime.now().isoformat()
 DATASETS_SNAPSHOTS_DIR = "data-snapshots/experimental"
 DATASET_FIGURES_PATH = "figures/data_generation"
 parser = argparse.ArgumentParser()
-dataset_name_choices = ["manywell", "gaussian_mixture_2d", "skewed_gaussian_2d","circles"]
+dataset_name_choices = ["many_well", "gaussian_mixture_2d", "skewed_gaussian_2d","circles"]
 # args names
 
 # main args
@@ -43,13 +43,13 @@ parser.add_argument("--n-eval", type=int, default=200_000,
 # TODO to remove
 # parser.add_argument("--n-time-grid", type=int, default=1024,
 #                     help="Number of points in the time grid", required=False)
-parser.add_argument("--dataset-name", choices=dataset_name_choices, type=str, default="manywell",
+parser.add_argument("--dataset-name", choices=dataset_name_choices, type=str, default="many-well",
                     help="Name of the dataset", required=False)
 # dataset specific params
 # manywell
-parser.add_argument("--manywell-data-dim", type=int, default=4,
+parser.add_argument("--many-well-total-data-dim", type=int, default=4,
                     help="Dimensionality of the data for manywell dist", required=False)
-parser.add_argument("--manywell-dim", type=int, default=4,
+parser.add_argument("--many-well-dim", type=int, default=4,
                     help="Dimensionality of the ManyWell target", required=False)
 # for gaussian mixture
 parser.add_argument("--gm-2d-num-components", type=int, default=3,
@@ -96,20 +96,22 @@ if __name__ == "__main__":
         f"Generating data-snapshot with dataset_name = {dataset_name} "
         f"with n_train/test/eval = {args.n_train}, {args.n_test}, {args.n_eval}")
 
-    if dataset_name == "manywell":
-        assert (hasattr(args, "manywell_total_data_dim") and hasattr(args,
-                                                                     "manywell_dim") and
-                args.manywell_total_data_dim is not None and args.manywell_dim is not None)
+    if dataset_name == "many_well":
+        assert (hasattr(args, "many_well_total_data_dim") and hasattr(args,
+                                                                     "many_well_dim") and
+                args.many_well_total_data_dim is not None and args.many_well_dim is not None)
         # FIXME : for many-well, the dim info is taken from the kwargs not the x_dim and y_dim
         data_snapshot_dict = DataSnapShotUtils.generate_transport_data_snapshot(dataset_name=dataset_name, x_dim=-1,
                                                                                 y_dim=-1, n_train=args.n_train,
                                                                                 n_test=args.n_test, n_eval=args.n_eval,
-                                                                                data_dim=args.data_dim,
-                                                                                manywell_data_dim=args.manywell_dim)
+                                                                                many_well_total_data_dim=args.many_well_total_data_dim,
+                                                                                many_well_dim=args.many_well_dim)
         snapshot_file_name = (f"data_snapshot_{dataset_name}"
-                              f"_data_dim_{args.manywell_total_data_dim}"
-                              f"_manywell_dim_{args.manywell_dim}"
-                              f"_n_train_test_{args.n_train_test}_n_eval_{args.n_eval}"
+                              f"_data_dim_{args.many_well_total_data_dim}"
+                              f"_many_well_dim_{args.many_well_dim}"
+                              f"_n_train_{args.n_train}"
+                              f"_n_test_{args.n_test}"
+                              f"_n_eval_{args.n_eval}"
                               f"_timestamp_{TIMESTAMP}.pkl")
 
 

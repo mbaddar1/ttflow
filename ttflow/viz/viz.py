@@ -1165,7 +1165,7 @@ class Visualizer:
         # Disjoint consecutive pairs: (0,1), (2,3), (4,5), ...
         pairs = [(k, k + 1) for k in range(0, d - 1, 2)]
         if d % 2 == 1:
-            warnings.warn(f"D={d} is odd; last dimension x_{d - 1} is not plotted.")
+            logger.warning(f"D={d} is odd; last dimension x_{d - 1} is not plotted.")
         n_pairs = len(pairs)
 
         n_cols = int(np.ceil(np.sqrt(n_pairs)))
@@ -1222,3 +1222,60 @@ class Visualizer:
             fig.savefig(save_path, dpi=200, bbox_inches="tight")
         plt.show()
         return fig, axes_all  # axes_all[k][(i, j)] -> Axes
+    @classmethod
+    def plot_one_sample_nd_pairwise(
+            cls,
+            x: torch.Tensor,
+            title: str = "Pairwise distribution",
+            save_path: Optional[Union[str, Path]] = None,
+            value_range: Optional[tuple] = None,
+            grid_size: int = 100,
+            levels: int = 30,
+            margin_ratio: float = 0.15,
+            max_kde_samples: Optional[int] = 3000,
+            cell_size: float = 3.0,
+    ):
+        """Contour plot of one (N, D) sample set over consecutive pairs (0,1), (2,3), ..."""
+        if x.ndim != 2 or x.shape[1] < 2:
+            raise ValueError(f"Expected shape (N, D) with D >= 2, got {tuple(x.shape)}")
+
+        data = x.detach().cpu().numpy()
+        d = data.shape[1]
+        pairs = [(k, k + 1) for k in range(0, d - 1, 2)]
+        if d % 2 == 1:
+            logger.warning(f"D={d} is odd; last dimension x_{d - 1} is not plotted.")
+
+        n_cols = int(np.ceil(np.sqrt(len(pairs))))
+        n_rows = int(np.ceil(len(pairs) / n_cols))
+
+        def _range(k: int) -> tuple:
+            if value_range is not None:
+                return value_range
+            lo, hi = data[:, k].min(), data[:, k].max()
+            m = max(margin_ratio * (hi - lo), 1e-3)
+            return (lo - m, hi + m)
+
+        fig, axes = plt.subplots(n_rows, n_cols,
+                                 figsize=(n_cols * cell_size, n_rows * cell_size),
+                                 squeeze=False)
+        for ax, (i, j) in zip(axes.ravel(), pairs):
+            h_range, v_range = _range(i), _range(j)
+            X1, X2 = np.meshgrid(np.linspace(*h_range, grid_size),
+                                 np.linspace(*v_range, grid_size))
+            cls._kde_contour(ax, data[:, [i, j]], X1, X2, levels,
+                             max_kde_samples=max_kde_samples)
+            ax.set_xlim(h_range)
+            ax.set_ylim(v_range)
+            ax.set_xlabel(rf"$x_{{{i}}}$", fontsize=11)
+            ax.set_ylabel(rf"$x_{{{j}}}$", fontsize=11)
+            ax.tick_params(axis="both", labelsize=8)
+
+        for ax in axes.ravel()[len(pairs):]:
+            ax.set_visible(False)
+
+        fig.suptitle(title, fontsize=16)
+        fig.tight_layout()
+        if save_path is not None:
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        return fig, axes

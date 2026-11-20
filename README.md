@@ -1,79 +1,175 @@
-# TT-Flow: Adaptive Low-Rank Rectified Flows
+# TTFLOw
 
-## Manifesto
+**Approximating rectified-flow velocity fields with functional tensor trains.**
 
-TT-Flow explores a simple principle: **generative flow trajectories should be approximated adaptively, not forced into a globally simple representation.**
-
-Rectified Flow aims to straighten generative trajectories, but residual non-linearity can remain even after reflow. Rather than relying exclusively on expensive global training cycles to eliminate this non-linearity, TT-Flow investigates whether Functional Tensor Trains (FTT) and Density Matrix Renormalization Group (DMRG) algorithms can represent and solve the problem locally.
-
-The central hypothesis is that **adaptive low-rank tensor representations can capture local trajectory structure efficiently, providing a practical alternative to globally uniform model complexity.**
-
-The project follows two complementary directions: distilling existing flow trajectories into adaptive piecewise approximations, and ultimately training standalone generative flow models directly in the tensor-train representation.
-
----
-
-## Dev Work
-
-* Main branch: `main`
-
----
-
-## Roadmap
-
-### Phase 1: Distillation & Piecewise Linearization (FTT + DMRG)
-
-* **Goal:** Distill teacher trajectories into adaptive low-rank FTT representations using DMRG rank adaptation.
-* **Key Experiments:**
-  1. **Trajectory Straightness Benchmark:** Measure local trajectory curvature and straightness across time segments $t \in [t_k, t_{k+1}]$.
-  2. **Global vs. Local FTTs:** Compare a single unified continuous-time model $FTT(z,t)$ against decoupled, segment-specific FTT models.
-
-### Phase 2: TT-Flow from Scratch
-
-* **Goal:** Train a standalone generative Flow Matching model from scratch using FTT velocity cores, without a teacher model.
-* **Key Focus:** Optimal Transport (Sinkhorn) pairing to resolve trajectory crossings, combined with mini-batch DMRG/ALS optimization sweeps.
-
----
-
-## Possible Contributions
-
-* **Adaptive Local Approximation:** Instead of fighting non-linearity through additional expensive global Reflow training cycles, TT-Flow accepts residual non-linearity and models it locally within small time windows $[t_k, t_{k+1}]$ using rank-adaptive tensor cores.
-* **Entropy-Guided Residual Modeling:** Investigate whether entropy-guided rank adaptation can allocate representational capacity where local trajectory complexity demands it, connecting adaptive model structure with established ideas in low-rank tensor compression.
-* **From Distillation to Generation:** Explore a path from compressing existing flow trajectories to learning generative velocity fields directly through tensor-train representations.
-
-These are research hypotheses to validate experimentally, not assumed results.
-
----
-# Experiments
-## Settings 
-Quoted from the Rectified flow paper , p23 the `experimental settings section`
-* Using $\pi_0$ as Gaussian
-* We use MLP and U-Net (with possible adaption to tabular data ??)
-* Solvers : euler, rk4 and dopri8
-
-## Experiment 1
+> Lightweight documentation — work in progress. Last updated: <!-- TODO: YYYY-MM-DD -->
 
 
+## Status
 
-___
-## Key takeaways and observations 
-* 
+<!-- Update this checklist as work progresses. -->
+
+- [x] Train neural-network rectified flow (teacher)
+  - Dataset Multiwell Gaussian 
+  - Explore how generation trajectories look like
+- [ ] Generate teacher trajectories and split into $K$ time segments
+- [ ] Fit FTT student on a single segment
+- [ ] Fit FTT students on all $K$ segments
+- [ ] Compare FTT vs. neural network (sample quality, memory, training time)
+- [ ] Compare training algorithms (ALS / DMRG vs. gradient-based)
+- [ ] <!-- TODO: next milestone -->
+
+**Current focus:** <!-- TODO: one sentence on what you are working on now -->
+
+**Latest result:** <!-- TODO: one sentence + link to experiments.md entry -->
+
+
+## ROADMAP
+
+### Datasets to experiment
+
+Synthetic target densities taken from the Tensor Train Diffusion paper ([Gruhlke et al., 2026](https://arxiv.org/abs/2607.06841)), in planned order:
+
+- [ ] **High-dimensional Multiwell** (Sec. 4.1, Eq. 18): $\rho(x) = \exp\big(-\sum_{i=1}^{m}(x_i^2-\delta)^2 - \tfrac12\sum_{i=m+1}^{d} x_i^2\big)$, with $2^m$ modes
+  - [ ] $d=10,\ m=3,\ \delta=2$ (8 modes), quick sanity check
+  - [ ] $d=50,\ m=5,\ \delta=2$ (32 modes)
+  - [ ] $d=10,\ m=10,\ \delta=2$ (1024 modes), the setting used to compare baselines (App. B.4)
+- [ ] **Anisotropic Gaussian** (Sec. 4.3): $\log\rho(x) = -x^\top M x$, $M$ random full-rank, exact answer known, useful for studying TT ranks
+- [ ] **$\phi^4$ scalar field / Ginzburg–Landau** (Sec. 4.2, Eq. 19): Multiwell plus nearest-neighbour coupling $-\tfrac12\sum_{i=1}^{d-1}(x_i-x_{i+1})^2$, $\delta=2$
+- [ ] **Modified Kitagawa state-space model** (App. B.5): one-mode, strongly correlated posterior, $d=10$, $\sigma_v=\sigma_w=1$, varying nonlinearity $\gamma$
+
+Paper metrics: ESS, $\log Z$ error, log-variance divergence (App. B.2). Baselines (PIS, DDS, DIS, GBS, CMCD, SCLD, CRAFT, AFT, MFVI, MCD) are available in the repository by Chen et al. (2024).
+
+
+## Overview
+
+Rectified flows are generative models that learn to transport samples from a source distribution $\pi_0$ to a target distribution $\pi_1$.
+Given a pairing of source and target samples $x_0 \sim \pi_0$ and $x_1 \sim \pi_1$, the generation trajectory from $x_0$ to $x_1$ is modeled as an ordinary differential equation (ODE):
+
+$$
+\hat{x}_1 = x_0 + \int_{0}^{1} v(x_t, t)\, dt,
+$$
+
+where $v(x_t, t)$ is a learned velocity field, $x_t$ is the state at time $t \in [0, 1]$, and $x_0, x_1, \hat{x}_1 \in \mathbb{R}^d$ are $d$-dimensional vectors.
+The generated samples $\hat{x}_1$ follow the pushforward distribution $\hat{\pi}_1$, which should approximate $\pi_1$.
+
+
+<details>
+<summary><b>Background: how rectified flows are trained</b></summary>
+
+### Model Training
+
+The main idea behind **Rectified Flow** is to learn trajectories that transport samples from a source distribution to a target distribution while implicitly encouraging these trajectories to be as straight as possible. This principle is reflected in the training objective (loss function) over $n$ training pairs $(x_0^{(i)}, x_1^{(i)})$:
+
+$$
+\theta^* = \arg\min_\theta \sum_{i=1}^{n}
+\int_0^1
+\left\|
+(x_1^{(i)}-x_0^{(i)})-v(x_t^{(i)},t;\theta)
+\right\|^2 dt
+$$
+
+where
+
+$$
+x_t^{(i)} = (1-t)x_0^{(i)}+tx_1^{(i)}.
+$$
+
+The straight-line trajectory assumption is incorporated into the formulation in two complementary ways:
+
+1. **Objective design:** The loss encourages the learned velocity field $v(x_t,t;\theta)$ to approximate the constant displacement vector $x_1-x_0$, representing the velocity along the straight-line path connecting the source and target samples.
+
+2. **Intermediate state construction:** The velocity field takes $x_t$ as an input, where $x_t$ is constructed through linear interpolation between $x_0$ and $x_1$. Thus, the model is trained to predict the target velocity at intermediate states sampled along predefined straight-line paths.
+
+It is important to note that Rectified Flow does not explicitly penalize the curvature or deviation from straightness of the generated trajectories. Rather, **straightness is implicitly encouraged through the training objective and the construction of intermediate states**. Consequently, the learned trajectories are not necessarily straight, and their actual geometric properties remain an empirical question.
+
+To straighten trajectories further, Liu et al. propose **reflow**: retraining the model on pairs $(x_0, \hat{x}_1)$ generated by the previously learned flow. PeRFlow applies this idea piecewise over time segments (see [Approach](#approach)).
+
+</details>
+
+
+### Motivation
+
+In the original rectified flow paper ([Liu et al., 2022](https://arxiv.org/abs/2209.03003)), the velocity field $v$ is modeled as a neural network, such as a simple feedforward network or a U-Net.
+In this project, we explore an alternative: modeling the velocity field with a low-rank **tensor train (TT)** ([Oseledets, 2011](https://doi.org/10.1137/090752286)).
+
+The motivation is twofold:
+
+- **Memory efficiency:** a low-rank TT represents high-dimensional functions with far fewer parameters than a dense representation.
+- **Efficient training algorithms:** TTs can be fitted with dedicated solvers such as alternating least squares (ALS) and DMRG, which may offer advantages over gradient-based training of neural networks for the rectified flow objective.
+
+
+### Approach
+
+Inspired by PeRFlow ([Yan et al., 2024](https://arxiv.org/abs/2405.07510)), which splits the time interval into $K$ segments $0 = t_0 < t_1 < \dots < t_K = 1$ and straightens the flow within each one, this project approximates the per-segment velocity fields with **functional tensor trains (FTT)** ([Gorodetsky et al., 2019](https://arxiv.org/abs/1510.09088)):
+
+$$
+v_k(x_t, t), \quad t \in [t_k, t_{k+1}), \quad k = 0, \dots, K-1.
+$$
+
+As a first step, we use a pretrained neural-network rectified flow as the **teacher** and train FTTs as **students** that learn the straight segments.
+
+<!-- TODO: optional diagram of teacher → segments → FTT students -->
+<!-- ![Method overview](assets/method.png) -->
+
+
+## Experiments
+
+<!-- Newest first. One line per experiment; full details in experiments.md. -->
+
+| Date | Experiment | Key finding | Details |
+|---|---|---|---|
+| <!-- YYYY-MM-DD --> | <!-- short title --> | <!-- one-line finding --> | <!-- [→](experiments.md#anchor) --> |
+
+Full details, code links and commit hashes: [experiments.md](experiments.md)
+
+<!-- TODO: add one headline figure once results exist -->
+<!-- ![Key result](assets/key_result.png) -->
+
+
+## Getting Started
+TBD
+<!-- TODO: fill in once the code is runnable -->
+
+```bash
+# Clone
+git clone <!-- TODO: repo URL -->
+cd TTFLOw
+
+# Install dependencies
+# TODO: e.g. pip install -r requirements.txt
+
+# Train the teacher
+# TODO: e.g. python train_teacher.py --config configs/teacher.yaml
+
+# Fit FTT students
+# TODO: e.g. python train_ftt.py --config configs/ftt.yaml
+```
+
+
+## Repository Structure
+
+<!-- TODO: update to match the actual layout -->
+
+```
+TTFLOw/
+├── README.md
+├── experiments.md
+├── configs/        # experiment configurations
+├── src/            # models, training, FTT code
+├── scripts/        # entry points for training / evaluation
+└── assets/         # figures used in the docs
+```
 
 
 ## References
 
-1. **Local Flow Matching Generative Models.**  
-   https://arxiv.org/abs/2410.02548
-2. **PeRFlow: Piecewise Rectified Flow as Universal Plug-and-Play Accelerator.**  
-   https://arxiv.org/abs/2405.07510
-3. **Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow.**  
-   https://arxiv.org/abs/2209.03003
-4. **On the Convergence and Straightness of Rectified Flow**
-    https://arxiv.org/pdf/2410.14949
-5. **Simple ReFlow: Improved Techniques for Fast Flow Models** (ICLR 2025).  
-   https://proceedings.iclr.cc/paper_files/paper/2025/hash/a95ba79ea3881ffd9fb8620e1a0d4b36-Abstract-Conference.html
-6. **Analyzing and Mitigating Model Collapse in Rectified Flow Models** (2024).  
-   https://arxiv.org/abs/2412.08175
-7. **Improving the Training of Rectified Flows** (NeurIPS 2024).  
-   https://proceedings.neurips.cc/paper_files/paper/2024/hash/7343a5c976f8399880b695267f1f9e9f-Abstract-Conference.html
-8. **ProReflow: Progressive Reflow with Decomposed Velocity** (CVPR 2025).  
-   https://openaccess.thecvf.com/content/CVPR2025/html/Ke_ProReflow_Progressive_Reflow_with_Decomposed_Velocity_CVPR_2025_paper.html
+- Liu, Gong & Liu (2022). *Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow.* [arXiv:2209.03003](https://arxiv.org/abs/2209.03003)
+- Yan et al. (2024). *PeRFlow: Piecewise Rectified Flow as Universal Plug-and-Play Accelerator.* [arXiv:2405.07510](https://arxiv.org/abs/2405.07510)
+- Oseledets (2011). *Tensor-Train Decomposition.* SIAM J. Sci. Comput. [doi:10.1137/090752286](https://doi.org/10.1137/090752286)
+- Gorodetsky, Karaman & Marzouk (2019). *A continuous analogue of the tensor-train decomposition.* [arXiv:1510.09088](https://arxiv.org/abs/1510.09088)
+- Gruhlke, Berner, Sommer & Richter (2026). *Tensor Train Diffusion: Leveraging Low-Rank Structures for High-Dimensional Score-Based Sampling.* [arXiv:2607.06841](https://arxiv.org/abs/2607.06841)
+- Simple ReFlow: Improved Techniques for Fast Flow Models https://arxiv.org/abs/2410.07815
+- Balanced conic rectified flow https://arxiv.org/abs/2510.25229
+- SlimFlow: Training Smaller One-Step Diffusion
+Models with Rectified Flow https://arxiv.org/pdf/2407.12718

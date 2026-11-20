@@ -45,7 +45,6 @@ class DataSnapShotUtils:
 
         logger.info(f"Finished generating samples for {dataset_name}")
         # viz
-
         return data_snapshot_dict
 
     @staticmethod
