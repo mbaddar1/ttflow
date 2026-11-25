@@ -8,6 +8,7 @@ https://drive.google.com/drive/folders/1wazn94CNAhzXrKliK0UjWIiPMzcw6O_U?usp=dri
 
 sample runs
 python data_snapshot_generator.py --dataset-name skewed_gaussian_2d --mean [0.0,0.0] --cov [[1.0,0.0],[0.0,1.0]] --shape [5.0,5.0]
+python data_snapshot_generator.py --dataset-name multiwell_ttd --multiwell-dim 10 --multiwell-m 3 --multiwell-delta 2.0
 python data_snapshot_generator.py --dataset-name gaussian_mixture_2d --gaussian-mixture-2d-num-components 4 --n-train 100_000 --n-test 20_000 --n-eval 20_000
 
 """
@@ -30,7 +31,7 @@ TIMESTAMP = datetime.now().isoformat()
 DATASETS_SNAPSHOTS_DIR = "data-snapshots/experimental"
 DATASET_FIGURES_PATH = "figures/data_generation"
 parser = argparse.ArgumentParser()
-dataset_name_choices = ["many_well", "gaussian_mixture_2d", "skewed_gaussian_2d","circles"]
+dataset_name_choices = ["many_well", "multiwell_ttd", "gaussian_mixture_2d", "skewed_gaussian_2d","circles"]
 # args names
 
 # main args
@@ -51,6 +52,13 @@ parser.add_argument("--many-well-total-data-dim", type=int, default=4,
                     help="Dimensionality of the data for manywell dist", required=False)
 parser.add_argument("--many-well-dim", type=int, default=4,
                     help="Dimensionality of the ManyWell target", required=False)
+# multiwell_ttd (Gruhlke et al. 2026, TTD paper Sec. 4.1, Eq. 18)
+parser.add_argument("--multiwell-dim", type=int, default=10,
+                    help="Total dimension d of the TTD Multiwell target", required=False)
+parser.add_argument("--multiwell-m", type=int, default=3,
+                    help="Number of double-well coordinates m (2^m modes)", required=False)
+parser.add_argument("--multiwell-delta", type=float, default=2.0,
+                    help="Mode separation delta (wells at +-sqrt(delta))", required=False)
 # for gaussian mixture
 parser.add_argument("--gm-2d-num-components", type=int, default=3,
                     required=False)
@@ -114,6 +122,21 @@ if __name__ == "__main__":
                               f"_n_eval_{args.n_eval}"
                               f"_timestamp_{TIMESTAMP}.pkl")
 
+    elif dataset_name == "multiwell_ttd":
+        data_snapshot_dict = DataSnapShotUtils.generate_transport_data_snapshot(dataset_name=dataset_name, x_dim=-1,
+                                                                                y_dim=-1, n_train=args.n_train,
+                                                                                n_test=args.n_test, n_eval=args.n_eval,
+                                                                                multiwell_dim=args.multiwell_dim,
+                                                                                multiwell_m=args.multiwell_m,
+                                                                                multiwell_delta=args.multiwell_delta)
+        snapshot_file_name = (f"data_snapshot_{dataset_name}"
+                              f"_d_{args.multiwell_dim}"
+                              f"_m_{args.multiwell_m}"
+                              f"_delta_{args.multiwell_delta}"
+                              f"_n_train_{args.n_train}"
+                              f"_n_test_{args.n_test}"
+                              f"_n_eval_{args.n_eval}"
+                              f"_timestamp_{TIMESTAMP}.pkl")
 
     elif dataset_name == "gaussian_mixture_2d":
         data_dim = 2

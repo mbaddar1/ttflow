@@ -269,13 +269,15 @@ Click an image to open it at full size. Inference = base distribution, target an
 | `dopri8` | <a href="experiments_and_results/13/2-RecFlow/dopri8/inference_many_well_model_arch_VelocityFieldRegressionNet_data_params_many_well_total_data_dim_8_many_well_dim_8_timestamp_2026-11-19T18%3A54%3A11.595455_trajectory_model_global_ode_solver_method_dopri8_num_reflows_1.png"><img src="experiments_and_results/13/2-RecFlow/dopri8/inference_many_well_model_arch_VelocityFieldRegressionNet_data_params_many_well_total_data_dim_8_many_well_dim_8_timestamp_2026-11-19T18%3A54%3A11.595455_trajectory_model_global_ode_solver_method_dopri8_num_reflows_1.png" width="380"></a> | <a href="experiments_and_results/13/2-RecFlow/dopri8/trajectory_many_well_VelocityFieldRegressionNet_num_reflows_1_many_well_total_data_dim%3D8%2C%20many_well_dim%3D8_dopri8_2026-11-19T18%3A54%3A11.595455.png"><img src="experiments_and_results/13/2-RecFlow/dopri8/trajectory_many_well_VelocityFieldRegressionNet_num_reflows_1_many_well_total_data_dim%3D8%2C%20many_well_dim%3D8_dopri8_2026-11-19T18%3A54%3A11.595455.png" width="380"></a> |
 
 ___
-### Experiment # 4 (planned)
-**FTT as the $v_t$ approximator during reflow, with temporal segmentation**
+### Experiment # 5 (planned)
+**FTT as the $v_t$ approximator during reflow, with temporal segmentation (NN teacher → FTT student)**
+
+> Renumbered from Experiment # 4. Experiment # 4 is now the NN teacher → smaller NN student version of the same segmentation idea; see [WORK_PLAN.md](WORK_PLAN.md).
 
 #### Motivation
 Experiment # 3 (many-well, total dim 8, many-well dim 8) shows that the reflow step with the regression NN gives degenerate results. 2-RecFlow is worse than 1-RecFlow both visually (see the inference figures) and in Sinkhorn divergence: the average Sinkhorn Δ grows from 0.081–0.088 to 0.149–0.153 (+80%), and it is significantly worse at 14–15 of 15 blur values for every solver. Experiment # 2 shows the same trend, more weakly (+30%).
 
-Experiment # 4 therefore tests a different approximator for $v_t$ during the reflow process: a **functional tensor train (FTT)** instead of the NN.
+Experiment # 5 therefore tests a different approximator for $v_t$ during the reflow process: a **functional tensor train (FTT)** instead of the NN.
 
 #### Inspiration
 - **PeRFlow** ([Yan et al., 2024](https://arxiv.org/abs/2405.07510)): splits the time interval into $K$ segments $0 = t_0 < t_1 < \dots < t_K = 1$ and performs the reflow (straightening) separately inside each segment, using a pretrained flow as the teacher.

@@ -354,9 +354,9 @@ if __name__ == "__main__":
                 f"num_reflows_{num_reflows}.png")
     figure_path = os.path.join(INFERENCE_FIGURES_DIR, filename)
     logger.info("Staring visualization...")
-    titles_dict = {"many_well": "Many Well", "skewed_gaussian_2d": "Skewed Gaussian 2D",
+    titles_dict = {"many_well": "Many Well", "multiwell_ttd": "Multiwell (TTD Eq. 18)", "skewed_gaussian_2d": "Skewed Gaussian 2D",
                    "gaussian_mixture_2d": "Gaussian Mixture 2D"}
-    if dataset_name in ["many_well", "skewed_gaussian_2d", "gaussian_mixture_2d"]:
+    if dataset_name in ["many_well", "multiwell_ttd", "skewed_gaussian_2d", "gaussian_mixture_2d"]:
         # Gaussian like plots
         title = titles_dict[dataset_name]
         logger.info(f"Visualizing {dataset_name}")
