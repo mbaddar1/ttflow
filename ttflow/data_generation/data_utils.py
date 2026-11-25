@@ -7,6 +7,7 @@ from sklearn.datasets import make_regression, make_friedman1, make_friedman2, ma
     make_circles, make_swiss_roll, make_moons
 from loguru import logger
 from ttflow.data_generation.distributions.many_well import ManyWell_Gaussian
+from ttflow.data_generation.distributions.multiwell_ttd import MultiwellTTD
 from ttflow.data_generation.distributions.multivariate_skewnorm import MultivariateSkewGaussian
 from ttflow.viz.viz import Visualizer
 from datetime import datetime
@@ -251,6 +252,23 @@ class DataUtils:
             x1 = many_well_gaussian_dist.sample([n])
             dummy_time_stamp = datetime.now().isoformat()
             ManyWell_Gaussian.pairwise_plot(sample=x1,output_file_name=os.path.join(FIGURES_DIR,f"many_well_dims_{many_well_total_dim}_{many_well_dim}_{dummy_time_stamp}.png"))
+        elif dataset_name == "multiwell_ttd":
+            # Gruhlke et al. (2026), TTD paper Sec. 4.1, Eq. (18)
+            for key in ["multiwell_dim", "multiwell_m", "multiwell_delta"]:
+                assert key in kwargs.keys(), f"missing kwarg {key} for multiwell_ttd"
+            mw_dim, mw_m, mw_delta = kwargs["multiwell_dim"], kwargs["multiwell_m"], kwargs["multiwell_delta"]
+            multiwell_dist = MultiwellTTD(dim=mw_dim, m=mw_m, delta=mw_delta)
+            x1 = multiwell_dist.sample([n])
+            logger.info(f"multiwell_ttd: d = {mw_dim}, m = {mw_m}, delta = {mw_delta}, "
+                        f"modes = {multiwell_dist.n_modes}, log Z = {multiwell_dist.log_Z:.6f}, "
+                        f"mode-occupancy TV vs uniform = {multiwell_dist.mode_occupancy_tv(x1):.4f}")
+            plot_dim = max(k for k in (2, 4, 8, 16) if k <= mw_dim) if mw_dim >= 2 else None
+            if plot_dim is not None:
+                os.makedirs(FIGURES_DIR, exist_ok=True)
+                ManyWell_Gaussian.pairwise_plot(
+                    sample=x1[:, :plot_dim],
+                    output_file_name=os.path.join(FIGURES_DIR, f"multiwell_ttd_d_{mw_dim}_m_{mw_m}_delta_{mw_delta}_"
+                                                               f"{datetime.now().isoformat()}.png"))
         elif dataset_name == "gaussian_mixture_2d":
             num_components_key_name = "num_components"
             kwargs_has_ncomps = num_components_key_name in kwargs.keys()

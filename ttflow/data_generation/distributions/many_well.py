@@ -326,11 +326,11 @@ class ManyWell_Gaussian():
     ):
         """
         Plot 2D KDEs of disjoint dimension pairs (0,1), (2,3), ... in a
-        semi-square grid. Supported dims: 2, 4, 8, 16.
+        semi-square grid. Works for any d >= 2 (e.g. 8, 16, 32); for odd d the last dimension is not plotted.
         """
         assert sample.dim() == 2, "sample must be of shape (N, d)"
         d = sample.shape[1]
-        assert d in (2, 4, 8, 16), f"d must be one of 2, 4, 8, 16 (got {d})"
+        assert d >= 2, f"need at least 2 dimensions to plot (got {d})"
 
         X = sample.detach().cpu()
         if X.shape[0] > max_points:
