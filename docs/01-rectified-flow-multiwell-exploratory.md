@@ -1,4 +1,4 @@
-# 01 — Rectified Flow with Multiwell Problems: An Exploratory Experiment
+# 01 — Rectified Flow on the ManyWell Problem: An Exploratory Experiment
 
 > **Series:** TTFlow technical notes, article 01
 > **Type:** exploratory experiment
